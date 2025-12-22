@@ -58,8 +58,10 @@ import {
   Upload,
   FileText,
   Download,
+  Paperclip,
   Users,
 } from 'lucide-react';
+import { PatientAttachments } from '@/components/patient/PatientAttachments';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -99,6 +101,7 @@ export default function Patients() {
   const [copied, setCopied] = useState(false);
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(true);
+  const [attachmentsPatient, setAttachmentsPatient] = useState<Patient | null>(null);
   
   // Bulk selection and actions
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
@@ -1101,6 +1104,12 @@ export default function Patients() {
                                   Reativar
                                 </DropdownMenuItem>
                               )}
+                              <DropdownMenuItem
+                                onClick={() => setAttachmentsPatient(patient)}
+                              >
+                                <Paperclip className="h-4 w-4 mr-2" />
+                                Anexos
+                              </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => setDeletePatientId(patient.id)}
@@ -1732,6 +1741,17 @@ export default function Patients() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Patient Attachments Dialog */}
+      {attachmentsPatient && profile?.user_id && (
+        <PatientAttachments
+          patientId={attachmentsPatient.id}
+          professionalId={profile.user_id}
+          patientName={attachmentsPatient.full_name}
+          isOpen={!!attachmentsPatient}
+          onClose={() => setAttachmentsPatient(null)}
+        />
+      )}
     </AppLayout>
   );
 }

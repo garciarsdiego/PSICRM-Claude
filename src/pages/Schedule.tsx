@@ -34,6 +34,8 @@ import {
   Clock,
   User,
   Settings2,
+  Video,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
@@ -87,7 +89,26 @@ export default function Schedule() {
     price: '',
     notes: '',
     recurrence_type: 'none' as 'none' | 'weekly' | 'biweekly' | 'monthly',
+    sync_google_calendar: true,
   });
+
+  // Fetch Google Calendar token to check if connected
+  const { data: googleToken } = useQuery({
+    queryKey: ['google-calendar-token', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from('google_calendar_tokens')
+        .select('*')
+        .eq('professional_id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  const isGoogleConnected = !!googleToken;
 
   // Handle Google OAuth callback
   useEffect(() => {
@@ -245,9 +266,25 @@ export default function Schedule() {
       const { error } = await supabase.from('sessions').insert(sessionsToInsert);
       if (error) throw error;
       
-      return recurringDates.length;
+      // Sync with Google Calendar if enabled and connected
+      let meetLinksCreated = 0;
+      if (session.sync_google_calendar && isGoogleConnected) {
+        try {
+          const { data: syncResult, error: syncError } = await supabase.functions.invoke('google-calendar-sync', {
+            body: { action: 'sync' },
+          });
+          
+          if (!syncError && syncResult?.synced) {
+            meetLinksCreated = syncResult.synced;
+          }
+        } catch (syncErr) {
+          console.error('Error syncing with Google Calendar:', syncErr);
+        }
+      }
+      
+      return { count: recurringDates.length, meetLinksCreated };
     },
-    onSuccess: (count) => {
+    onSuccess: ({ count, meetLinksCreated }) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       setIsDialogOpen(false);
       setNewSession({
@@ -257,12 +294,18 @@ export default function Schedule() {
         price: '',
         notes: '',
         recurrence_type: 'none',
+        sync_google_calendar: true,
       });
-      toast({ 
-        title: count > 1 
-          ? `${count} sessões agendadas com sucesso!` 
-          : 'Sessão agendada com sucesso!' 
-      });
+      
+      let message = count > 1 
+        ? `${count} sessões agendadas com sucesso!` 
+        : 'Sessão agendada com sucesso!';
+      
+      if (meetLinksCreated > 0) {
+        message += ` Link do Meet criado automaticamente.`;
+      }
+      
+      toast({ title: message });
     },
     onError: () => {
       toast({ title: 'Erro ao agendar sessão', variant: 'destructive' });
@@ -464,12 +507,41 @@ export default function Schedule() {
                     </p>
                   )}
                 </div>
+                
+                {/* Google Calendar Sync */}
+                {isGoogleConnected && (
+                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <Video className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">Sincronizar com Google</p>
+                        <p className="text-xs text-muted-foreground">
+                          Criar evento e link do Meet automaticamente
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={newSession.sync_google_calendar}
+                      onCheckedChange={(checked) =>
+                        setNewSession({ ...newSession, sync_google_calendar: checked })
+                      }
+                    />
+                  </div>
+                )}
+                
                 <Button
                   className="w-full"
                   onClick={() => createSession.mutate(newSession)}
-                  disabled={!newSession.patient_id || !newSession.scheduled_at}
+                  disabled={!newSession.patient_id || !newSession.scheduled_at || createSession.isPending}
                 >
-                  Agendar Sessão
+                  {createSession.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Agendando...
+                    </>
+                  ) : (
+                    'Agendar Sessão'
+                  )}
                 </Button>
               </div>
             </DialogContent>

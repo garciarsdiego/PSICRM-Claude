@@ -8,11 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Bell, CreditCard, Save, Eye, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { 
+  Mail, Bell, CreditCard, Save, Eye, Send, CheckCircle, AlertCircle, Loader2,
+  Users, Clock, Play
+} from 'lucide-react';
 
 export default function Emails() {
   const { user, profile } = useAuth();
@@ -21,6 +25,12 @@ export default function Emails() {
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
   const [sendingType, setSendingType] = useState<'session_reminder' | 'payment_reminder' | null>(null);
+  
+  // Bulk email state
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  const [bulkEmailTemplate, setBulkEmailTemplate] = useState<'session_reminder' | 'payment_reminder'>('session_reminder');
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
+  const [isRunningCron, setIsRunningCron] = useState(false);
 
   // Check if Google is connected
   const { data: googleToken } = useQuery({
@@ -171,6 +181,98 @@ export default function Emails() {
     },
   });
 
+  // Send bulk email function
+  const sendBulkEmails = async () => {
+    if (!user?.id || selectedPatients.length === 0) return;
+    
+    setIsSendingBulk(true);
+    let sent = 0;
+    let errors = 0;
+
+    for (const patientId of selectedPatients) {
+      const patient = patients.find(p => p.id === patientId);
+      if (!patient?.email) {
+        errors++;
+        continue;
+      }
+
+      try {
+        const data: any = {
+          patient_name: patient.full_name,
+          date: new Date().toLocaleDateString('pt-BR'),
+          time: '14:00',
+          duration: 50,
+          sessions_count: '1',
+          total_amount: patient.session_price?.toFixed(2) || '0.00',
+        };
+
+        const { data: result, error } = await supabase.functions.invoke('send-gmail', {
+          body: {
+            to: patient.email,
+            template: bulkEmailTemplate,
+            professional_id: user.id,
+            data,
+          },
+        });
+
+        if (error || result?.error) {
+          errors++;
+        } else {
+          sent++;
+        }
+      } catch (err) {
+        errors++;
+      }
+    }
+
+    setIsSendingBulk(false);
+    setSelectedPatients([]);
+    
+    toast({
+      title: `Envio em massa concluído`,
+      description: `${sent} emails enviados, ${errors} erros`,
+    });
+  };
+
+  // Run cron job manually
+  const runRemindersCron = async () => {
+    setIsRunningCron(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email-reminders');
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Lembretes processados!',
+        description: data?.message || `${data?.sent || 0} lembretes enviados`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Erro ao processar lembretes',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRunningCron(false);
+    }
+  };
+
+  const togglePatientSelection = (patientId: string) => {
+    setSelectedPatients(prev => 
+      prev.includes(patientId) 
+        ? prev.filter(id => id !== patientId)
+        : [...prev, patientId]
+    );
+  };
+
+  const selectAllPatients = () => {
+    const patientsWithEmail = patients.filter(p => p.email).map(p => p.id);
+    setSelectedPatients(patientsWithEmail);
+  };
+
+  const deselectAllPatients = () => {
+    setSelectedPatients([]);
+  };
+
   const renderPreview = (template: string) => {
     return template
       .replace('{{nome}}', 'João Silva')
@@ -181,6 +283,7 @@ export default function Emails() {
   };
 
   const isGoogleConnected = !!googleToken;
+  const patientsWithEmail = patients.filter(p => p.email);
 
   return (
     <AppLayout>
@@ -286,6 +389,133 @@ export default function Emails() {
                     Lembrete de Pagamento
                   </Button>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Bulk Email Section */}
+        {isGoogleConnected && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Envio em Massa
+              </CardTitle>
+              <CardDescription>
+                Envie emails para múltiplos pacientes de uma vez
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={selectAllPatients}>
+                    Selecionar todos
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={deselectAllPatients}>
+                    Limpar seleção
+                  </Button>
+                </div>
+                <Badge variant="secondary">
+                  {selectedPatients.length} de {patientsWithEmail.length} selecionados
+                </Badge>
+              </div>
+              
+              <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-1">
+                {patientsWithEmail.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhum paciente com email cadastrado
+                  </p>
+                ) : (
+                  patientsWithEmail.map((patient) => (
+                    <div
+                      key={patient.id}
+                      className="flex items-center gap-3 p-2 hover:bg-muted rounded cursor-pointer"
+                      onClick={() => togglePatientSelection(patient.id)}
+                    >
+                      <Checkbox
+                        checked={selectedPatients.includes(patient.id)}
+                        onCheckedChange={() => togglePatientSelection(patient.id)}
+                      />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{patient.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{patient.email}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="flex items-end gap-4">
+                <div className="flex-1">
+                  <Label>Template</Label>
+                  <Select 
+                    value={bulkEmailTemplate} 
+                    onValueChange={(v) => setBulkEmailTemplate(v as 'session_reminder' | 'payment_reminder')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="session_reminder">Lembrete de Sessão</SelectItem>
+                      <SelectItem value="payment_reminder">Lembrete de Pagamento</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  onClick={sendBulkEmails}
+                  disabled={selectedPatients.length === 0 || isSendingBulk}
+                >
+                  {isSendingBulk ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Enviar para {selectedPatients.length} pacientes
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Automatic Reminders Cron */}
+        {isGoogleConnected && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Lembretes Automáticos
+              </CardTitle>
+              <CardDescription>
+                Os lembretes são enviados automaticamente diariamente. Você pode executar manualmente também.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                <div>
+                  <p className="font-medium">Executar lembretes agora</p>
+                  <p className="text-sm text-muted-foreground">
+                    Envia lembretes para sessões agendadas conforme sua configuração de dias de antecedência
+                  </p>
+                </div>
+                <Button onClick={runRemindersCron} disabled={isRunningCron}>
+                  {isRunningCron ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      Executar
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>

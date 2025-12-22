@@ -499,6 +499,7 @@ export type Database = {
           google_event_id: string | null
           id: string
           is_recurring: boolean | null
+          meet_link: string | null
           notes: string | null
           paid_at: string | null
           patient_id: string
@@ -517,6 +518,7 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           is_recurring?: boolean | null
+          meet_link?: string | null
           notes?: string | null
           paid_at?: string | null
           patient_id: string
@@ -535,6 +537,7 @@ export type Database = {
           google_event_id?: string | null
           id?: string
           is_recurring?: boolean | null
+          meet_link?: string | null
           notes?: string | null
           paid_at?: string | null
           patient_id?: string

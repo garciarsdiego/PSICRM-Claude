@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Calendar, Clock, User, DollarSign, FileText, Edit2, X } from 'lucide-react';
+import { Calendar, Clock, User, DollarSign, FileText, Edit2, X, Video } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -215,6 +215,24 @@ export function SessionDetailModal({
               </div>
             )}
           </div>
+
+          {/* Google Meet Link */}
+          {session.meet_link && (
+            <div className="flex items-center justify-between p-3 bg-primary/10 rounded-lg">
+              <div className="flex items-center gap-2">
+                <Video className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-foreground">Google Meet</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                onClick={() => window.open(session.meet_link!, '_blank')}
+              >
+                Entrar na Reunião
+              </Button>
+            </div>
+          )}
 
           {/* Payment Status */}
           <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">

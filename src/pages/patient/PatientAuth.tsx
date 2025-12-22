@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,15 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Brain, Loader2, Heart } from 'lucide-react';
+import { Heart, Loader2, User, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
 
 const emailSchema = z.string().email('Email inválido');
 const passwordSchema = z.string().min(6, 'Senha deve ter no mínimo 6 caracteres');
 
-export default function Auth() {
+export default function PatientAuth() {
   const navigate = useNavigate();
-  const { user, signIn, signUp } = useAuth();
+  const { user, role, signIn, signUp } = useAuth();
   const { toast } = useToast();
   
   const [isLoading, setIsLoading] = useState(false);
@@ -27,10 +27,12 @@ export default function Auth() {
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
 
   useEffect(() => {
-    if (user) {
+    if (user && role === 'patient') {
+      navigate('/patient/dashboard');
+    } else if (user && role === 'professional') {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, role, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +102,7 @@ export default function Auth() {
     }
 
     setIsLoading(true);
-    const { error } = await signUp(signupEmail, signupPassword, signupName);
+    const { error } = await signUp(signupEmail, signupPassword, signupName, 'patient');
     setIsLoading(false);
 
     if (error) {
@@ -120,29 +122,37 @@ export default function Auth() {
     } else {
       toast({
         title: 'Conta criada com sucesso!',
-        description: 'Você será redirecionado para o painel.',
+        description: 'Você será redirecionado para o portal.',
       });
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <Link 
+          to="/auth" 
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-1" />
+          Voltar para login do profissional
+        </Link>
+
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-            <Brain className="w-8 h-8 text-primary" />
+            <User className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">MentalCare Pro</h1>
+          <h1 className="text-3xl font-bold text-foreground">Portal do Paciente</h1>
           <p className="text-muted-foreground mt-2">
-            Gestão completa para o seu consultório
+            Acesse suas sessões e pagamentos
           </p>
         </div>
 
         <Card className="border-border shadow-lg">
           <CardHeader className="space-y-1 pb-4">
-            <CardTitle className="text-2xl text-center">Bem-vindo</CardTitle>
+            <CardTitle className="text-2xl text-center">Área do Paciente</CardTitle>
             <CardDescription className="text-center">
-              Entre ou crie sua conta para continuar
+              Entre ou crie sua conta de paciente
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -196,7 +206,7 @@ export default function Auth() {
                     <Input
                       id="signup-name"
                       type="text"
-                      placeholder="Dr. João Silva"
+                      placeholder="João Silva"
                       value={signupName}
                       onChange={(e) => setSignupName(e.target.value)}
                       disabled={isLoading}
@@ -252,14 +262,8 @@ export default function Auth() {
         </Card>
 
         <p className="text-center text-sm text-muted-foreground mt-6 flex items-center justify-center gap-1">
-          Feito com <Heart className="w-4 h-4 text-destructive" /> para profissionais de saúde mental
+          Cuide da sua saúde mental <Heart className="w-4 h-4 text-destructive" />
         </p>
-
-        <div className="text-center mt-4">
-          <a href="/patient/auth" className="text-sm text-primary hover:underline">
-            Sou paciente → Acessar Portal do Paciente
-          </a>
-        </div>
       </div>
     </div>
   );

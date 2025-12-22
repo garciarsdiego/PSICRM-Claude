@@ -45,6 +45,7 @@ import { DayView } from '@/components/schedule/DayView';
 import { WeekView } from '@/components/schedule/WeekView';
 import { MonthView } from '@/components/schedule/MonthView';
 import { SessionDetailModal } from '@/components/schedule/SessionDetailModal';
+import { TimeSlotPicker } from '@/components/schedule/TimeSlotPicker';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
@@ -345,17 +346,23 @@ export default function Schedule() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Time Slot Picker */}
+                <div>
+                  <Label className="mb-2 block">Horário Disponível</Label>
+                  <TimeSlotPicker
+                    onSelect={(date) => {
+                      setNewSession({ ...newSession, scheduled_at: date.toISOString() });
+                    }}
+                  />
+                  {newSession.scheduled_at && (
+                    <p className="text-sm text-primary mt-2">
+                      Selecionado: {format(new Date(newSession.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Data e Hora</Label>
-                    <Input
-                      type="datetime-local"
-                      value={newSession.scheduled_at}
-                      onChange={(e) =>
-                        setNewSession({ ...newSession, scheduled_at: e.target.value })
-                      }
-                    />
-                  </div>
                   <div>
                     <Label>Duração (min)</Label>
                     <Input
@@ -369,18 +376,18 @@ export default function Schedule() {
                       }
                     />
                   </div>
-                </div>
-                <div>
-                  <Label>Valor (R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={newSession.price}
-                    onChange={(e) =>
-                      setNewSession({ ...newSession, price: e.target.value })
-                    }
-                    placeholder="Deixe em branco para usar valor padrão"
-                  />
+                  <div>
+                    <Label>Valor (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={newSession.price}
+                      onChange={(e) =>
+                        setNewSession({ ...newSession, price: e.target.value })
+                      }
+                      placeholder="Valor padrão"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label>Observações</Label>
@@ -390,6 +397,7 @@ export default function Schedule() {
                       setNewSession({ ...newSession, notes: e.target.value })
                     }
                     placeholder="Notas sobre a sessão..."
+                    rows={2}
                   />
                 </div>
                 <div className="flex items-center space-x-2">

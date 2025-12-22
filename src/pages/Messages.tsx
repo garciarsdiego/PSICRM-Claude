@@ -176,9 +176,9 @@ export default function Messages() {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4 h-[calc(100%-4rem)]">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[calc(100%-4rem)]">
           {/* Patients List */}
-          <Card className="col-span-1 flex flex-col">
+          <Card className="flex flex-col md:col-span-1">
             <CardHeader className="pb-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -246,7 +246,7 @@ export default function Messages() {
           </Card>
 
           {/* Chat Area */}
-          <Card className="col-span-2 flex flex-col">
+          <Card className="hidden md:flex md:col-span-2 flex-col">
             {selectedPatient ? (
               <>
                 <CardHeader className="border-b">

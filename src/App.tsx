@@ -16,6 +16,7 @@ import Emails from "./pages/Emails";
 import EmailTemplates from "./pages/EmailTemplates";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 // Patient Portal
 import PatientAuth from "./pages/patient/PatientAuth";
 import PatientDashboard from "./pages/patient/PatientDashboard";
@@ -111,6 +112,9 @@ const App = () => (
                 <PatientMessages />
               </ProtectedRoute>
             } />
+            
+            {/* Public Routes */}
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

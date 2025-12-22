@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './Sidebar';
+import { GlobalSearch } from './GlobalSearch';
 import { Loader2 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -39,6 +40,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <main className="flex-1 overflow-auto">
         {children}
       </main>
+      <GlobalSearch />
     </div>
   );
 }

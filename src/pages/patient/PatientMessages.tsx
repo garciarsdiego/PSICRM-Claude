@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { Send, MessageSquare, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
@@ -96,6 +97,9 @@ export default function PatientMessages() {
       toast({ title: 'Erro ao enviar mensagem', variant: 'destructive' });
     },
   });
+
+  // Enable realtime messages
+  useRealtimeMessages(patientRecord?.id || null, user?.id);
 
   // Mark messages as read
   useEffect(() => {

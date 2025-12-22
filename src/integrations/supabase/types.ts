@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      blocked_slots: {
+        Row: {
+          blocked_date: string
+          created_at: string
+          end_time: string
+          id: string
+          professional_id: string
+          reason: string | null
+          start_time: string
+        }
+        Insert: {
+          blocked_date: string
+          created_at?: string
+          end_time: string
+          id?: string
+          professional_id: string
+          reason?: string | null
+          start_time: string
+        }
+        Update: {
+          blocked_date?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          professional_id?: string
+          reason?: string | null
+          start_time?: string
+        }
+        Relationships: []
+      }
       email_settings: {
         Row: {
           created_at: string
@@ -82,6 +112,45 @@ export type Database = {
           id?: string
           notes?: string | null
           professional_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      google_calendar_tokens: {
+        Row: {
+          access_token: string
+          calendar_id: string | null
+          created_at: string
+          id: string
+          last_sync_at: string | null
+          professional_id: string
+          refresh_token: string
+          sync_enabled: boolean
+          token_expires_at: string
+          updated_at: string
+        }
+        Insert: {
+          access_token: string
+          calendar_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          professional_id: string
+          refresh_token: string
+          sync_enabled?: boolean
+          token_expires_at: string
+          updated_at?: string
+        }
+        Update: {
+          access_token?: string
+          calendar_id?: string | null
+          created_at?: string
+          id?: string
+          last_sync_at?: string | null
+          professional_id?: string
+          refresh_token?: string
+          sync_enabled?: boolean
+          token_expires_at?: string
           updated_at?: string
         }
         Relationships: []
@@ -279,6 +348,39 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           zip_code?: string | null
+        }
+        Relationships: []
+      }
+      professional_availability: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          end_time: string
+          id: string
+          is_active: boolean
+          professional_id: string
+          start_time: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          end_time: string
+          id?: string
+          is_active?: boolean
+          professional_id: string
+          start_time: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          professional_id?: string
+          start_time?: string
+          updated_at?: string
         }
         Relationships: []
       }

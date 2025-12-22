@@ -33,9 +33,11 @@ import {
   User,
   Phone,
   Mail,
-  MapPin,
   Edit,
   Eye,
+  Link2,
+  Unlink,
+  Loader2,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -47,8 +49,11 @@ export default function Patients() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -68,9 +73,9 @@ export default function Patients() {
 
   // Fetch patients
   const { data: patients = [], isLoading } = useQuery({
-    queryKey: ['patients', profile?.id],
+    queryKey: ['patients', profile?.user_id],
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.user_id) return [];
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -79,7 +84,7 @@ export default function Patients() {
       if (error) throw error;
       return data as Patient[];
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.user_id,
   });
 
   // Create/Update patient mutation
@@ -125,8 +130,71 @@ export default function Patients() {
           : 'Paciente cadastrado com sucesso!',
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error('Error saving patient:', error);
       toast({ title: 'Erro ao salvar paciente', variant: 'destructive' });
+    },
+  });
+
+  // Link patient to user account
+  const linkPatient = useMutation({
+    mutationFn: async ({ patientId, email }: { patientId: string; email: string }) => {
+      // Find user profile by email
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+      if (!userProfile) throw new Error('Usuário não encontrado com este email');
+
+      // Check if user has patient role
+      const { data: userRole, error: roleError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userProfile.user_id)
+        .eq('role', 'patient')
+        .maybeSingle();
+
+      if (roleError) throw roleError;
+      if (!userRole) throw new Error('Este usuário não possui conta de paciente');
+
+      // Update patient with user_id
+      const { error: updateError } = await supabase
+        .from('patients')
+        .update({ user_id: userProfile.user_id })
+        .eq('id', patientId);
+
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setIsLinkDialogOpen(false);
+      setLinkEmail('');
+      setSelectedPatient(null);
+      toast({ title: 'Paciente vinculado com sucesso!' });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || 'Erro ao vincular paciente', variant: 'destructive' });
+    },
+  });
+
+  // Unlink patient from user account
+  const unlinkPatient = useMutation({
+    mutationFn: async (patientId: string) => {
+      const { error } = await supabase
+        .from('patients')
+        .update({ user_id: null })
+        .eq('id', patientId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      toast({ title: 'Vínculo removido com sucesso!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao remover vínculo', variant: 'destructive' });
     },
   });
 
@@ -178,15 +246,31 @@ export default function Patients() {
     setIsViewMode(false);
   };
 
+  const openLinkDialog = (patient: Patient) => {
+    setSelectedPatient(patient);
+    setLinkEmail(patient.email || '');
+    setIsLinkDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.full_name.trim()) {
+      toast({ title: 'Nome é obrigatório', variant: 'destructive' });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await savePatient.mutateAsync(formData);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const filteredPatients = patients.filter(
     (p) =>
       p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.phone?.includes(searchTerm)
   );
-
-  const activePatients = filteredPatients.filter((p) => p.is_active);
-  const inactivePatients = filteredPatients.filter((p) => !p.is_active);
 
   return (
     <AppLayout>
@@ -198,217 +282,10 @@ export default function Patients() {
               Gerencie o cadastro dos seus pacientes
             </p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => openDialog()}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Paciente
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {isViewMode
-                    ? 'Detalhes do Paciente'
-                    : selectedPatient
-                    ? 'Editar Paciente'
-                    : 'Novo Paciente'}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <Label>Nome Completo *</Label>
-                    <Input
-                      value={formData.full_name}
-                      onChange={(e) =>
-                        setFormData({ ...formData, full_name: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="Nome do paciente"
-                    />
-                  </div>
-                  <div>
-                    <Label>E-mail</Label>
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) =>
-                        setFormData({ ...formData, email: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="email@exemplo.com"
-                    />
-                  </div>
-                  <div>
-                    <Label>Telefone</Label>
-                    <Input
-                      value={formData.phone}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phone: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="(11) 99999-9999"
-                    />
-                  </div>
-                  <div>
-                    <Label>CPF</Label>
-                    <Input
-                      value={formData.cpf}
-                      onChange={(e) =>
-                        setFormData({ ...formData, cpf: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="000.000.000-00"
-                    />
-                  </div>
-                  <div>
-                    <Label>Data de Nascimento</Label>
-                    <Input
-                      type="date"
-                      value={formData.birth_date}
-                      onChange={(e) =>
-                        setFormData({ ...formData, birth_date: e.target.value })
-                      }
-                      disabled={isViewMode}
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-3">Endereço</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <Label>Endereço</Label>
-                      <Input
-                        value={formData.address}
-                        onChange={(e) =>
-                          setFormData({ ...formData, address: e.target.value })
-                        }
-                        disabled={isViewMode}
-                        placeholder="Rua, número, complemento"
-                      />
-                    </div>
-                    <div>
-                      <Label>Cidade</Label>
-                      <Input
-                        value={formData.city}
-                        onChange={(e) =>
-                          setFormData({ ...formData, city: e.target.value })
-                        }
-                        disabled={isViewMode}
-                      />
-                    </div>
-                    <div>
-                      <Label>Estado</Label>
-                      <Input
-                        value={formData.state}
-                        onChange={(e) =>
-                          setFormData({ ...formData, state: e.target.value })
-                        }
-                        disabled={isViewMode}
-                        placeholder="SP"
-                      />
-                    </div>
-                    <div>
-                      <Label>CEP</Label>
-                      <Input
-                        value={formData.zip_code}
-                        onChange={(e) =>
-                          setFormData({ ...formData, zip_code: e.target.value })
-                        }
-                        disabled={isViewMode}
-                        placeholder="00000-000"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-3">Contato de Emergência</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Nome</Label>
-                      <Input
-                        value={formData.emergency_contact}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            emergency_contact: e.target.value,
-                          })
-                        }
-                        disabled={isViewMode}
-                      />
-                    </div>
-                    <div>
-                      <Label>Telefone</Label>
-                      <Input
-                        value={formData.emergency_phone}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            emergency_phone: e.target.value,
-                          })
-                        }
-                        disabled={isViewMode}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-t pt-4">
-                  <h3 className="font-semibold mb-3">Informações de Atendimento</h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label>Valor da Sessão (R$)</Label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={formData.session_price}
-                        onChange={(e) =>
-                          setFormData({ ...formData, session_price: e.target.value })
-                        }
-                        disabled={isViewMode}
-                        placeholder="Deixe em branco para usar padrão"
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2 pt-6">
-                      <Switch
-                        checked={formData.is_active}
-                        onCheckedChange={(checked) =>
-                          setFormData({ ...formData, is_active: checked })
-                        }
-                        disabled={isViewMode}
-                      />
-                      <Label>Paciente Ativo</Label>
-                    </div>
-                  </div>
-                  <div className="mt-4">
-                    <Label>Observações Clínicas</Label>
-                    <Textarea
-                      value={formData.clinical_notes}
-                      onChange={(e) =>
-                        setFormData({ ...formData, clinical_notes: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="Anotações gerais sobre o paciente..."
-                      rows={4}
-                    />
-                  </div>
-                </div>
-
-                {!isViewMode && (
-                  <Button
-                    className="w-full"
-                    onClick={() => savePatient.mutate(formData)}
-                    disabled={!formData.full_name}
-                  >
-                    {selectedPatient ? 'Salvar Alterações' : 'Cadastrar Paciente'}
-                  </Button>
-                )}
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => openDialog()}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Paciente
+          </Button>
         </div>
 
         {/* Search */}
@@ -423,10 +300,10 @@ export default function Patients() {
         </div>
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total de Pacientes</CardTitle>
+              <CardTitle className="text-sm font-medium">Total</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{patients.length}</div>
@@ -444,11 +321,21 @@ export default function Patients() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Inativos</CardTitle>
+              <CardTitle className="text-sm font-medium">Vinculados</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-primary">
+                {patients.filter((p) => p.user_id).length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Sem Vínculo</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-muted-foreground">
-                {patients.filter((p) => !p.is_active).length}
+                {patients.filter((p) => !p.user_id).length}
               </div>
             </CardContent>
           </Card>
@@ -470,6 +357,7 @@ export default function Patients() {
                     <TableHead>Paciente</TableHead>
                     <TableHead>Contato</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Vínculo</TableHead>
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -520,6 +408,33 @@ export default function Patients() {
                         </Badge>
                       </TableCell>
                       <TableCell>
+                        {patient.user_id ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="bg-primary/20 text-primary border-primary">
+                              <Link2 className="h-3 w-3 mr-1" />
+                              Vinculado
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => unlinkPatient.mutate(patient.id)}
+                              title="Remover vínculo"
+                            >
+                              <Unlink className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openLinkDialog(patient)}
+                          >
+                            <Link2 className="h-4 w-4 mr-1" />
+                            Vincular
+                          </Button>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
@@ -544,6 +459,264 @@ export default function Patients() {
             )}
           </CardContent>
         </Card>
+
+        {/* Patient Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {isViewMode
+                  ? 'Detalhes do Paciente'
+                  : selectedPatient
+                  ? 'Editar Paciente'
+                  : 'Novo Paciente'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Nome Completo *</Label>
+                  <Input
+                    value={formData.full_name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, full_name: e.target.value })
+                    }
+                    disabled={isViewMode}
+                    placeholder="Nome do paciente"
+                  />
+                </div>
+                <div>
+                  <Label>E-mail</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    disabled={isViewMode}
+                    placeholder="email@exemplo.com"
+                  />
+                </div>
+                <div>
+                  <Label>Telefone</Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    disabled={isViewMode}
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <Label>CPF</Label>
+                  <Input
+                    value={formData.cpf}
+                    onChange={(e) =>
+                      setFormData({ ...formData, cpf: e.target.value })
+                    }
+                    disabled={isViewMode}
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+                <div>
+                  <Label>Data de Nascimento</Label>
+                  <Input
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) =>
+                      setFormData({ ...formData, birth_date: e.target.value })
+                    }
+                    disabled={isViewMode}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">Endereço</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <Label>Endereço</Label>
+                    <Input
+                      value={formData.address}
+                      onChange={(e) =>
+                        setFormData({ ...formData, address: e.target.value })
+                      }
+                      disabled={isViewMode}
+                      placeholder="Rua, número, complemento"
+                    />
+                  </div>
+                  <div>
+                    <Label>Cidade</Label>
+                    <Input
+                      value={formData.city}
+                      onChange={(e) =>
+                        setFormData({ ...formData, city: e.target.value })
+                      }
+                      disabled={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <Label>Estado</Label>
+                    <Input
+                      value={formData.state}
+                      onChange={(e) =>
+                        setFormData({ ...formData, state: e.target.value })
+                      }
+                      disabled={isViewMode}
+                      placeholder="SP"
+                    />
+                  </div>
+                  <div>
+                    <Label>CEP</Label>
+                    <Input
+                      value={formData.zip_code}
+                      onChange={(e) =>
+                        setFormData({ ...formData, zip_code: e.target.value })
+                      }
+                      disabled={isViewMode}
+                      placeholder="00000-000"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">Contato de Emergência</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Nome</Label>
+                    <Input
+                      value={formData.emergency_contact}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          emergency_contact: e.target.value,
+                        })
+                      }
+                      disabled={isViewMode}
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefone</Label>
+                    <Input
+                      value={formData.emergency_phone}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          emergency_phone: e.target.value,
+                        })
+                      }
+                      disabled={isViewMode}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h3 className="font-semibold mb-3">Informações de Atendimento</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Valor da Sessão (R$)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.session_price}
+                      onChange={(e) =>
+                        setFormData({ ...formData, session_price: e.target.value })
+                      }
+                      disabled={isViewMode}
+                      placeholder="Deixe em branco para usar padrão"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2 pt-6">
+                    <Switch
+                      checked={formData.is_active}
+                      onCheckedChange={(checked) =>
+                        setFormData({ ...formData, is_active: checked })
+                      }
+                      disabled={isViewMode}
+                    />
+                    <Label>Paciente Ativo</Label>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Label>Observações Clínicas</Label>
+                  <Textarea
+                    value={formData.clinical_notes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, clinical_notes: e.target.value })
+                    }
+                    disabled={isViewMode}
+                    placeholder="Anotações gerais sobre o paciente..."
+                    rows={4}
+                  />
+                </div>
+              </div>
+
+              {!isViewMode && (
+                <Button
+                  className="w-full"
+                  onClick={handleSave}
+                  disabled={!formData.full_name || isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    selectedPatient ? 'Salvar Alterações' : 'Cadastrar Paciente'
+                  )}
+                </Button>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Link Patient Dialog */}
+        <Dialog open={isLinkDialogOpen} onOpenChange={setIsLinkDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Vincular Paciente</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Digite o e-mail da conta do paciente para vincular. O paciente precisa ter
+                criado uma conta no Portal do Paciente primeiro.
+              </p>
+              <div>
+                <Label>E-mail do Paciente</Label>
+                <Input
+                  type="email"
+                  value={linkEmail}
+                  onChange={(e) => setLinkEmail(e.target.value)}
+                  placeholder="paciente@email.com"
+                />
+              </div>
+              <Button
+                className="w-full"
+                onClick={() =>
+                  selectedPatient &&
+                  linkPatient.mutate({ patientId: selectedPatient.id, email: linkEmail })
+                }
+                disabled={!linkEmail || linkPatient.isPending}
+              >
+                {linkPatient.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Vinculando...
+                  </>
+                ) : (
+                  <>
+                    <Link2 className="mr-2 h-4 w-4" />
+                    Vincular Conta
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

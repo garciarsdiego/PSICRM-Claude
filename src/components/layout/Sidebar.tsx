@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { GlobalSearch } from './GlobalSearch';
 import {
   Brain,
   LayoutDashboard,
@@ -68,6 +69,9 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 py-4">
         <nav className="space-y-1 px-2">
+          {/* Search button */}
+          {!collapsed && <GlobalSearch variant="button" />}
+          
           {menuItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (

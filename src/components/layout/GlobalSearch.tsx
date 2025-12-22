@@ -26,7 +26,12 @@ interface SearchResult {
   route: string;
 }
 
-export function GlobalSearch() {
+interface GlobalSearchProps {
+  variant?: 'bar' | 'button';
+  onOpen?: () => void;
+}
+
+export function GlobalSearch({ variant = 'bar', onOpen }: GlobalSearchProps) {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const [open, setOpen] = useState(false);
@@ -118,7 +123,7 @@ export function GlobalSearch() {
       type: 'record' as const,
       title: r.patients?.full_name || 'Prontuário',
       subtitle: r.content?.slice(0, 50) + '...' || 'Sem conteúdo',
-      route: '/records',
+      route: '/patients',
     })),
   ];
 
@@ -154,18 +159,65 @@ export function GlobalSearch() {
     }
   };
 
+  const handleOpen = () => {
+    setOpen(true);
+    onOpen?.();
+  };
+
+  // Button variant for sidebar
+  if (variant === 'button') {
+    return (
+      <>
+        <button
+          onClick={handleOpen}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-sidebar-foreground hover:bg-sidebar-accent/50 w-full"
+        >
+          <Search className="w-5 h-5 flex-shrink-0" />
+          <span>Buscar</span>
+        </button>
+        <SearchDialog
+          open={open}
+          onOpenChange={setOpen}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          results={results}
+          patients={patients}
+          sessions={sessions}
+          records={records}
+          onSelect={handleSelect}
+          getIcon={getIcon}
+          getTypeLabel={getTypeLabel}
+        />
+      </>
+    );
+  }
+
+  // Bar variant for header
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted rounded-lg border transition-colors w-full max-w-xs"
+        onClick={handleOpen}
+        className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground bg-muted/50 hover:bg-muted rounded-lg border transition-colors w-full max-w-md"
       >
         <Search className="h-4 w-4" />
-        <span className="flex-1 text-left">Buscar...</span>
+        <span className="flex-1 text-left">Buscar pacientes, sessões...</span>
         <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
           <span className="text-xs">⌘</span>K
         </kbd>
       </button>
+      <SearchDialog
+        open={open}
+        onOpenChange={setOpen}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        results={results}
+        patients={patients}
+        sessions={sessions}
+        records={records}
+        onSelect={handleSelect}
+        getIcon={getIcon}
+        getTypeLabel={getTypeLabel}
+      />
 
       <CommandDialog open={open} onOpenChange={setOpen}>
         <CommandInput
@@ -265,5 +317,134 @@ export function GlobalSearch() {
         </CommandList>
       </CommandDialog>
     </>
+  );
+}
+
+// Extracted dialog component for reuse
+interface SearchDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  searchTerm: string;
+  onSearchChange: (value: string) => void;
+  results: SearchResult[];
+  patients: any[];
+  sessions: any[];
+  records: any[];
+  onSelect: (result: SearchResult) => void;
+  getIcon: (type: string) => React.ReactNode;
+  getTypeLabel: (type: string) => string;
+}
+
+function SearchDialog({
+  open,
+  onOpenChange,
+  searchTerm,
+  onSearchChange,
+  results,
+  patients,
+  sessions,
+  records,
+  onSelect,
+  getIcon,
+  getTypeLabel,
+}: SearchDialogProps) {
+  return (
+    <CommandDialog open={open} onOpenChange={onOpenChange}>
+      <CommandInput
+        placeholder="Buscar pacientes, sessões, prontuários..."
+        value={searchTerm}
+        onValueChange={onSearchChange}
+      />
+      <CommandList>
+        <CommandEmpty>
+          {searchTerm.length < 2 
+            ? 'Digite pelo menos 2 caracteres para buscar'
+            : 'Nenhum resultado encontrado'
+          }
+        </CommandEmpty>
+        {results.length > 0 && (
+          <>
+            {patients.length > 0 && (
+              <CommandGroup heading="Pacientes">
+                {results
+                  .filter((r) => r.type === 'patient')
+                  .map((result) => (
+                    <CommandItem
+                      key={result.id}
+                      onSelect={() => onSelect(result)}
+                      className="flex items-center gap-3 cursor-pointer"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        {getIcon(result.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{result.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {result.subtitle}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {getTypeLabel(result.type)}
+                      </Badge>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+            {sessions.length > 0 && (
+              <CommandGroup heading="Sessões">
+                {results
+                  .filter((r) => r.type === 'session')
+                  .map((result) => (
+                    <CommandItem
+                      key={result.id}
+                      onSelect={() => onSelect(result)}
+                      className="flex items-center gap-3 cursor-pointer"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        {getIcon(result.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{result.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {result.subtitle}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {getTypeLabel(result.type)}
+                      </Badge>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+            {records.length > 0 && (
+              <CommandGroup heading="Prontuários">
+                {results
+                  .filter((r) => r.type === 'record')
+                  .map((result) => (
+                    <CommandItem
+                      key={result.id}
+                      onSelect={() => onSelect(result)}
+                      className="flex items-center gap-3 cursor-pointer"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                        {getIcon(result.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{result.title}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {result.subtitle}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {getTypeLabel(result.type)}
+                      </Badge>
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
+          </>
+        )}
+      </CommandList>
+    </CommandDialog>
   );
 }

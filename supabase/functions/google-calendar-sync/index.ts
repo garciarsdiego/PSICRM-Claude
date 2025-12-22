@@ -171,7 +171,7 @@ serve(async (req) => {
                 .from('sessions')
                 .update({ 
                   google_event_id: createdEvent.id,
-                  notes: meetLink ? `${session.notes || ''}\n\nGoogle Meet: ${meetLink}`.trim() : session.notes
+                  meet_link: meetLink
                 })
                 .eq('id', session.id);
               

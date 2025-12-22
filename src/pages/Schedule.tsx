@@ -84,11 +84,20 @@ export default function Schedule() {
     const code = urlParams.get('code');
     const state = urlParams.get('state');
 
-    if (code && user?.id === state) {
+    // Check if we have a code and user is loaded
+    if (code && state && user?.id) {
+      // Verify state matches user id for security
+      if (user.id !== state) {
+        console.error('OAuth state mismatch');
+        window.history.replaceState({}, '', '/schedule');
+        return;
+      }
+
       // Exchange code for tokens
       const exchangeCode = async () => {
         try {
-          const { error } = await supabase.functions.invoke('google-calendar-auth', {
+          console.log('Exchanging OAuth code...');
+          const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
             body: {
               action: 'exchange_code',
               code,
@@ -96,8 +105,12 @@ export default function Schedule() {
             },
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error('Exchange error:', error);
+            throw error;
+          }
 
+          console.log('Exchange response:', data);
           toast({ title: 'Google Calendar conectado com sucesso!' });
           queryClient.invalidateQueries({ queryKey: ['google-calendar-token'] });
           
@@ -105,7 +118,11 @@ export default function Schedule() {
           window.history.replaceState({}, '', '/schedule');
         } catch (err) {
           console.error('Error exchanging code:', err);
-          toast({ title: 'Erro ao conectar Google Calendar', variant: 'destructive' });
+          toast({ 
+            title: 'Erro ao conectar Google Calendar', 
+            description: 'Verifique as configurações no Google Cloud Console.',
+            variant: 'destructive' 
+          });
           window.history.replaceState({}, '', '/schedule');
         }
       };

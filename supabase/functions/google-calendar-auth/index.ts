@@ -44,7 +44,11 @@ serve(async (req) => {
         client_id: GOOGLE_CLIENT_ID,
         redirect_uri: baseRedirectUri,
         response_type: 'code',
-        scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
+        scope: [
+          'https://www.googleapis.com/auth/calendar',
+          'https://www.googleapis.com/auth/calendar.events',
+          'https://www.googleapis.com/auth/gmail.send',
+        ].join(' '),
         access_type: 'offline',
         prompt: 'select_account consent',
         state: user.id,

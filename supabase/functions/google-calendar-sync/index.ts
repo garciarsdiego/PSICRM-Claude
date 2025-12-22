@@ -103,12 +103,12 @@ serve(async (req) => {
       let synced = 0;
       let imported = 0;
 
-      // Sync sessions to Google Calendar
+      // Sync sessions to Google Calendar with Meet links
       for (const session of sessions || []) {
         const startTime = new Date(session.scheduled_at);
         const endTime = new Date(startTime.getTime() + (session.duration || 50) * 60 * 1000);
 
-        const event = {
+        const event: any = {
           summary: session.title || `Sessão - ${session.patients?.full_name || 'Paciente'}`,
           description: session.notes || '',
           start: {
@@ -120,6 +120,15 @@ serve(async (req) => {
             timeZone: 'America/Sao_Paulo',
           },
           attendees: session.patients?.email ? [{ email: session.patients.email }] : undefined,
+          // Add Google Meet automatically
+          conferenceData: {
+            createRequest: {
+              requestId: session.id,
+              conferenceSolutionKey: {
+                type: 'hangoutsMeet',
+              },
+            },
+          },
         };
 
         try {
@@ -127,7 +136,7 @@ serve(async (req) => {
           if (session.google_event_id) {
             // Update existing event
             response = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${session.google_event_id}`,
+              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${session.google_event_id}?conferenceDataVersion=1`,
               {
                 method: 'PUT',
                 headers: {
@@ -138,9 +147,9 @@ serve(async (req) => {
               }
             );
           } else {
-            // Create new event
+            // Create new event with Meet link
             response = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`,
+              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?conferenceDataVersion=1`,
               {
                 method: 'POST',
                 headers: {
@@ -153,11 +162,20 @@ serve(async (req) => {
 
             if (response.ok) {
               const createdEvent = await response.json();
-              // Save Google event ID
+              // Save Google event ID and Meet link
+              const meetLink = createdEvent.conferenceData?.entryPoints?.find(
+                (e: any) => e.entryPointType === 'video'
+              )?.uri || null;
+              
               await supabase
                 .from('sessions')
-                .update({ google_event_id: createdEvent.id })
+                .update({ 
+                  google_event_id: createdEvent.id,
+                  notes: meetLink ? `${session.notes || ''}\n\nGoogle Meet: ${meetLink}`.trim() : session.notes
+                })
                 .eq('id', session.id);
+              
+              console.log('Created event with Meet link:', meetLink);
             }
           }
 

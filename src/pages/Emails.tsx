@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -7,32 +7,68 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Mail, Bell, CreditCard, Save, Eye } from 'lucide-react';
+import { Mail, Bell, CreditCard, Save, Eye, Send, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 export default function Emails() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
+  const [selectedPatient, setSelectedPatient] = useState<string>('');
+  const [sendingType, setSendingType] = useState<'session_reminder' | 'payment_reminder' | null>(null);
 
-  // Fetch email settings
-  const { data: settings, isLoading } = useQuery({
-    queryKey: ['email-settings', profile?.user_id],
+  // Check if Google is connected
+  const { data: googleToken } = useQuery({
+    queryKey: ['google-token', user?.id],
     queryFn: async () => {
-      if (!profile?.user_id) return null;
+      if (!user?.id) return null;
       const { data, error } = await supabase
-        .from('email_settings')
+        .from('google_calendar_tokens')
         .select('*')
-        .eq('professional_id', profile.user_id)
+        .eq('professional_id', user.id)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.user_id,
+    enabled: !!user?.id,
+  });
+
+  // Fetch patients
+  const { data: patients = [] } = useQuery({
+    queryKey: ['patients', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('patients')
+        .select('*')
+        .eq('professional_id', user.id)
+        .eq('is_active', true)
+        .order('full_name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
+  // Fetch email settings
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['email-settings', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data, error } = await supabase
+        .from('email_settings')
+        .select('*')
+        .eq('professional_id', user.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id,
   });
 
   const [formData, setFormData] = useState({
@@ -46,7 +82,7 @@ export default function Emails() {
   });
 
   // Update form when settings load
-  useState(() => {
+  useEffect(() => {
     if (settings) {
       setFormData({
         reminder_enabled: settings.reminder_enabled ?? true,
@@ -60,15 +96,15 @@ export default function Emails() {
           'Olá {{nome}}, você tem {{sessoes}} sessão(ões) pendente(s) no valor de R$ {{valor}}.',
       });
     }
-  });
+  }, [settings]);
 
   // Save settings mutation
   const saveSettings = useMutation({
     mutationFn: async () => {
-      if (!profile?.user_id) throw new Error('Usuário não autenticado');
+      if (!user?.id) throw new Error('Usuário não autenticado');
 
       const settingsData = {
-        professional_id: profile.user_id,
+        professional_id: user.id,
         ...formData,
       };
 
@@ -92,6 +128,49 @@ export default function Emails() {
     },
   });
 
+  // Send test email mutation
+  const sendTestEmail = useMutation({
+    mutationFn: async ({ template, patientId }: { template: string; patientId: string }) => {
+      const patient = patients.find(p => p.id === patientId);
+      if (!patient?.email) throw new Error('Paciente não possui email');
+      if (!user?.id) throw new Error('Usuário não autenticado');
+
+      const data: any = {
+        patient_name: patient.full_name,
+        date: new Date().toLocaleDateString('pt-BR'),
+        time: '14:00',
+        duration: 50,
+        sessions_count: '1',
+        total_amount: patient.session_price?.toFixed(2) || '0.00',
+      };
+
+      const { data: result, error } = await supabase.functions.invoke('send-gmail', {
+        body: {
+          to: patient.email,
+          template,
+          professional_id: user.id,
+          data,
+        },
+      });
+
+      if (error) throw error;
+      if (result?.error) throw new Error(result.error);
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: 'Email enviado com sucesso!' });
+      setSendingType(null);
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: 'Erro ao enviar email', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+      setSendingType(null);
+    },
+  });
+
   const renderPreview = (template: string) => {
     return template
       .replace('{{nome}}', 'João Silva')
@@ -101,15 +180,116 @@ export default function Emails() {
       .replace('{{valor}}', '450,00');
   };
 
+  const isGoogleConnected = !!googleToken;
+
   return (
     <AppLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">E-mails Automáticos</h1>
           <p className="text-muted-foreground">
-            Configure lembretes e notificações por e-mail
+            Configure lembretes e notificações por e-mail via Gmail
           </p>
         </div>
+
+        {/* Google Connection Status */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Mail className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="font-medium">Gmail API</p>
+                  <p className="text-sm text-muted-foreground">
+                    Envie emails diretamente pela sua conta Google
+                  </p>
+                </div>
+              </div>
+              {isGoogleConnected ? (
+                <Badge variant="default" className="gap-1">
+                  <CheckCircle className="h-3 w-3" />
+                  Conectado
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Não conectado
+                </Badge>
+              )}
+            </div>
+            {!isGoogleConnected && (
+              <p className="text-sm text-muted-foreground mt-3">
+                Conecte sua conta Google na página de <strong>Agenda</strong> para habilitar o envio de emails.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Test Email Section */}
+        {isGoogleConnected && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Send className="h-5 w-5" />
+                Enviar Email de Teste
+              </CardTitle>
+              <CardDescription>
+                Teste o envio de emails antes de configurar automações
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Paciente</Label>
+                  <Select value={selectedPatient} onValueChange={setSelectedPatient}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um paciente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {patients.filter(p => p.email).map((patient) => (
+                        <SelectItem key={patient.id} value={patient.id}>
+                          {patient.full_name} ({patient.email})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end gap-2">
+                  <Button
+                    onClick={() => {
+                      setSendingType('session_reminder');
+                      sendTestEmail.mutate({ template: 'session_reminder', patientId: selectedPatient });
+                    }}
+                    disabled={!selectedPatient || sendTestEmail.isPending}
+                    variant="outline"
+                  >
+                    {sendingType === 'session_reminder' && sendTestEmail.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Bell className="h-4 w-4 mr-2" />
+                    )}
+                    Lembrete de Sessão
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setSendingType('payment_reminder');
+                      sendTestEmail.mutate({ template: 'payment_reminder', patientId: selectedPatient });
+                    }}
+                    disabled={!selectedPatient || sendTestEmail.isPending}
+                    variant="outline"
+                  >
+                    {sendingType === 'payment_reminder' && sendTestEmail.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-4 w-4 mr-2" />
+                    )}
+                    Lembrete de Pagamento
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Session Reminders */}

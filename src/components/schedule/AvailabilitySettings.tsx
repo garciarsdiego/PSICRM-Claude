@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, Save } from 'lucide-react';
+import { Clock, Save, Timer, Users } from 'lucide-react';
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Domingo' },
@@ -37,7 +38,7 @@ type LocalAvailability = {
 };
 
 export function AvailabilitySettings() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -49,6 +50,17 @@ export function AvailabilitySettings() {
       is_active: day.value >= 1 && day.value <= 5,
     }))
   );
+
+  const [allowParallelSessions, setAllowParallelSessions] = useState(false);
+  const [bufferBetweenSessions, setBufferBetweenSessions] = useState(0);
+
+  // Initialize from profile
+  useEffect(() => {
+    if (profile) {
+      setAllowParallelSessions((profile as any).allow_parallel_sessions ?? false);
+      setBufferBetweenSessions((profile as any).buffer_between_sessions ?? 0);
+    }
+  }, [profile]);
 
   const { isLoading } = useQuery({
     queryKey: ['availability', user?.id],
@@ -86,6 +98,17 @@ export function AvailabilitySettings() {
     mutationFn: async () => {
       if (!user?.id) throw new Error('Usuário não autenticado');
 
+      // Update profile scheduling settings
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          allow_parallel_sessions: allowParallelSessions,
+          buffer_between_sessions: bufferBetweenSessions,
+        })
+        .eq('user_id', user.id);
+      
+      if (profileError) throw profileError;
+
       // Delete existing and insert new
       await supabase
         .from('professional_availability')
@@ -111,6 +134,7 @@ export function AvailabilitySettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
       toast({ title: 'Disponibilidade salva com sucesso!' });
     },
     onError: () => {
@@ -141,7 +165,56 @@ export function AvailabilitySettings() {
           Defina os dias e horários em que você está disponível para atendimentos
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
+        {/* Scheduling Options */}
+        <div className="grid gap-4 sm:grid-cols-2 p-4 rounded-lg border bg-muted/30">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <Label>Sessões Simultâneas</Label>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={allowParallelSessions}
+                onCheckedChange={setAllowParallelSessions}
+              />
+              <span className="text-sm text-muted-foreground">
+                {allowParallelSessions ? 'Permitido' : 'Não permitido'}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Permite agendar mais de uma sessão no mesmo horário
+            </p>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Timer className="h-4 w-4 text-muted-foreground" />
+              <Label>Intervalo entre Sessões</Label>
+            </div>
+            <Select
+              value={bufferBetweenSessions.toString()}
+              onValueChange={(v) => setBufferBetweenSessions(parseInt(v, 10))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Sem intervalo</SelectItem>
+                <SelectItem value="5">5 minutos</SelectItem>
+                <SelectItem value="10">10 minutos</SelectItem>
+                <SelectItem value="15">15 minutos</SelectItem>
+                <SelectItem value="20">20 minutos</SelectItem>
+                <SelectItem value="30">30 minutos</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Tempo mínimo entre o fim de uma sessão e o início da próxima
+            </p>
+          </div>
+        </div>
+
+        {/* Days of Week */}
         {DAYS_OF_WEEK.map((day) => {
           const slot = availability.find((a) => a.day_of_week === day.value);
           return (

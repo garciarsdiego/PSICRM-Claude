@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -18,12 +18,11 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog';
 import {
   User,
   Settings as SettingsIcon,
   Globe,
-  Shield,
-  CreditCard,
   Save,
 } from 'lucide-react';
 
@@ -43,6 +42,8 @@ export default function Settings() {
   const { profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -366,7 +367,9 @@ export default function Settings() {
                       Recomendamos trocar sua senha periodicamente
                     </p>
                   </div>
-                  <Button variant="outline">Alterar</Button>
+                  <Button variant="outline" onClick={() => setChangePasswordOpen(true)}>
+                    Alterar
+                  </Button>
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
@@ -376,7 +379,9 @@ export default function Settings() {
                       Seus dados são protegidos conforme a lei
                     </p>
                   </div>
-                  <Button variant="outline">Ver Política</Button>
+                  <Button variant="outline" onClick={() => navigate('/privacy-policy')}>
+                    Ver Política
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -390,6 +395,11 @@ export default function Settings() {
             Salvar Alterações
           </Button>
         </div>
+
+        <ChangePasswordDialog 
+          open={changePasswordOpen} 
+          onOpenChange={setChangePasswordOpen} 
+        />
       </div>
     </AppLayout>
   );

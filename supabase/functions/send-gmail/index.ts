@@ -228,6 +228,52 @@ serve(async (req) => {
         </div>
       `;
       emailSubject = `Lembrete: Pagamento pendente - R$ ${data.total_amount}`;
+    } else if (template === 'welcome') {
+      emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #8B5CF6, #A78BFA); padding: 30px; border-radius: 10px 10px 0 0;">
+            <h1 style="color: white; margin: 0;">👋 Bem-vindo(a)!</h1>
+          </div>
+          <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
+            <p style="font-size: 16px; color: #374151;">
+              Olá ${data.patient_name},
+            </p>
+            <p style="font-size: 16px; color: #374151;">
+              É um prazer recebê-lo(a) como novo paciente! A partir de agora, você faz parte do nosso consultório.
+            </p>
+            <div style="background: #EDE9FE; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0; color: #5B21B6;">
+                <strong>Sobre seu atendimento:</strong>
+              </p>
+              ${data.first_session_date ? `
+                <p style="margin: 0 0 10px 0; color: #5B21B6;">
+                  📅 Primeira sessão: ${data.first_session_date} às ${data.first_session_time}
+                </p>
+              ` : ''}
+              ${data.meet_link ? `
+                <p style="margin: 0 0 10px 0; color: #5B21B6;">
+                  📹 Link da reunião: <a href="${data.meet_link}" style="color: #7C3AED;">${data.meet_link}</a>
+                </p>
+              ` : ''}
+              <p style="margin: 0; color: #5B21B6;">
+                ⏱️ Duração: ${data.session_duration || 50} minutos
+              </p>
+            </div>
+            <p style="font-size: 16px; color: #374151;">
+              Caso tenha dúvidas, sinta-se à vontade para entrar em contato.
+            </p>
+            <p style="color: #6B7280; font-size: 14px; margin-top: 30px;">
+              Atenciosamente,<br>
+              ${profile.full_name}<br>
+              ${profile.specialty || 'Psicólogo(a)'}<br>
+              ${profile.crp ? `CRP: ${profile.crp}` : ''}<br>
+              ${profile.phone ? `📞 ${profile.phone}` : ''}<br>
+              ${profile.email ? `✉️ ${profile.email}` : ''}
+            </p>
+          </div>
+        </div>
+      `;
+      emailSubject = `Bem-vindo(a) ao consultório de ${profile.full_name}`;
     }
 
     // Send email via Gmail API

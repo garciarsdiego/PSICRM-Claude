@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './Sidebar';
 import { MobileSidebar } from './MobileSidebar';
 import { GlobalSearch } from './GlobalSearch';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Loader2 } from 'lucide-react';
 
 interface AppLayoutProps {
@@ -36,15 +37,16 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen bg-background w-full">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header with mobile menu and search */}
-        <header className="flex items-center gap-4 px-4 lg:px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        {/* Header with mobile menu, search and theme toggle */}
+        <header className="flex items-center gap-2 md:gap-4 px-3 md:px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <MobileSidebar />
-          <div className="flex-1 flex justify-center">
+          <div className="flex-1 flex justify-center max-w-xl mx-auto">
             <GlobalSearch variant="bar" />
           </div>
+          <ThemeToggle />
         </header>
         <main className="flex-1 overflow-auto">
           {children}

@@ -423,7 +423,10 @@ export default function Schedule() {
   };
 
 
-  const futureSessions = sessions.filter(
+  // Filter out cancelled sessions from calendar views
+  const visibleSessions = sessions.filter(s => s.status !== 'cancelled');
+
+  const futureSessions = visibleSessions.filter(
     (s) => new Date(s.scheduled_at) >= new Date() && s.status === 'scheduled'
   );
 
@@ -433,15 +436,15 @@ export default function Schedule() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 md:space-y-6 p-4 lg:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Agenda</h1>
-            <p className="text-muted-foreground">Gerencie suas sessões e compromissos</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Agenda</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Gerencie suas sessões e compromissos</p>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button className="w-full sm:w-auto">
                 <Plus className="mr-2 h-4 w-4" />
                 Nova Sessão
               </Button>
@@ -591,13 +594,14 @@ export default function Schedule() {
         </div>
 
         <Tabs defaultValue="calendar" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="calendar">Calendário</TabsTrigger>
-            <TabsTrigger value="upcoming">Próximas ({futureSessions.length})</TabsTrigger>
-            <TabsTrigger value="past">Anteriores</TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-1">
-              <Settings2 className="h-4 w-4" />
-              Configurações
+          <TabsList className="w-full grid grid-cols-2 md:flex md:w-auto">
+            <TabsTrigger value="calendar" className="text-xs md:text-sm">Calendário</TabsTrigger>
+            <TabsTrigger value="upcoming" className="text-xs md:text-sm">Próximas ({futureSessions.length})</TabsTrigger>
+            <TabsTrigger value="past" className="text-xs md:text-sm">Anteriores</TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center gap-1 text-xs md:text-sm">
+              <Settings2 className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Configurações</span>
+              <span className="sm:hidden">Config</span>
             </TabsTrigger>
           </TabsList>
 
@@ -621,7 +625,7 @@ export default function Schedule() {
                 {viewType === 'day' && (
                   <DayView
                     selectedDate={selectedDate}
-                    sessions={sessions}
+                    sessions={visibleSessions}
                     googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
@@ -630,7 +634,7 @@ export default function Schedule() {
                 {viewType === 'week' && (
                   <WeekView
                     currentDate={currentDate}
-                    sessions={sessions}
+                    sessions={visibleSessions}
                     googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
@@ -639,7 +643,7 @@ export default function Schedule() {
                 {viewType === 'month' && (
                   <MonthView
                     currentDate={currentDate}
-                    sessions={sessions}
+                    sessions={visibleSessions}
                     googleEvents={showGoogleEvents ? googleEvents : []}
                     selectedDate={selectedDate}
                     onDayClick={(date) => {

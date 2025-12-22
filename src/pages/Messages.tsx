@@ -168,15 +168,15 @@ export default function Messages() {
 
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-8rem)]">
+      <div className="h-[calc(100vh-8rem)] p-4 lg:p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Mensagens</h1>
-            <p className="text-muted-foreground">Comunique-se com seus pacientes</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Mensagens</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Comunique-se com seus pacientes</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-[calc(100%-4rem)]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[calc(100%-4rem)]">
           {/* Patients List */}
           <Card className="flex flex-col md:col-span-1">
             <CardHeader className="pb-2">
@@ -246,7 +246,7 @@ export default function Messages() {
           </Card>
 
           {/* Chat Area */}
-          <Card className="hidden md:flex md:col-span-2 flex-col">
+          <Card className="lg:col-span-2 flex-col hidden lg:flex">
             {selectedPatient ? (
               <>
                 <CardHeader className="border-b">

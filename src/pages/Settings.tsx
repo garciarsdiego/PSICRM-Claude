@@ -114,25 +114,25 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6 p-4 lg:p-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
-          <p className="text-muted-foreground">Gerencie seu perfil e preferências</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Configurações</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Gerencie seu perfil e preferências</p>
         </div>
 
-        <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="profile" className="flex items-center gap-2">
-              <User className="h-4 w-4" />
-              Perfil
+        <Tabs defaultValue="profile" className="space-y-4 md:space-y-6">
+          <TabsList className="w-full grid grid-cols-3 md:flex md:w-auto">
+            <TabsTrigger value="profile" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <User className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Perfil</span>
             </TabsTrigger>
-            <TabsTrigger value="practice" className="flex items-center gap-2">
-              <SettingsIcon className="h-4 w-4" />
-              Consultório
+            <TabsTrigger value="practice" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <SettingsIcon className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Consultório</span>
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="flex items-center gap-2">
-              <Globe className="h-4 w-4" />
-              Preferências
+            <TabsTrigger value="preferences" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <Globe className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Preferências</span>
             </TabsTrigger>
           </TabsList>
 

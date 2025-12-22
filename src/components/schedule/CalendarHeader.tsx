@@ -1,4 +1,4 @@
-import { format, addMonths, subMonths, addDays, subDays } from 'date-fns';
+import { format, addMonths, subMonths, addDays, subDays, addWeeks, subWeeks } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
@@ -11,10 +11,10 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from '@/components/ui/toggle-group';
-import { ChevronLeft, ChevronRight, CalendarIcon, CalendarDays, LayoutGrid } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarIcon, CalendarDays, CalendarRange, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type CalendarViewType = 'day' | 'month';
+export type CalendarViewType = 'day' | 'week' | 'month';
 
 interface CalendarHeaderProps {
   currentDate: Date;
@@ -32,6 +32,8 @@ export function CalendarHeader({
   const handlePrevious = () => {
     if (viewType === 'day') {
       onDateChange(subDays(currentDate, 1));
+    } else if (viewType === 'week') {
+      onDateChange(subWeeks(currentDate, 1));
     } else {
       onDateChange(subMonths(currentDate, 1));
     }
@@ -40,6 +42,8 @@ export function CalendarHeader({
   const handleNext = () => {
     if (viewType === 'day') {
       onDateChange(addDays(currentDate, 1));
+    } else if (viewType === 'week') {
+      onDateChange(addWeeks(currentDate, 1));
     } else {
       onDateChange(addMonths(currentDate, 1));
     }
@@ -100,6 +104,10 @@ export function CalendarHeader({
         <ToggleGroupItem value="day" aria-label="Visualização do dia" className="px-3">
           <CalendarDays className="h-4 w-4 mr-2" />
           Dia
+        </ToggleGroupItem>
+        <ToggleGroupItem value="week" aria-label="Visualização da semana" className="px-3">
+          <CalendarRange className="h-4 w-4 mr-2" />
+          Semana
         </ToggleGroupItem>
         <ToggleGroupItem value="month" aria-label="Visualização do mês" className="px-3">
           <LayoutGrid className="h-4 w-4 mr-2" />

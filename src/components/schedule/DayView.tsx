@@ -1,4 +1,4 @@
-import { format, isSameDay, parseISO, setHours, setMinutes } from 'date-fns';
+import { format, isSameDay, parseISO, setHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
@@ -11,6 +11,7 @@ interface DayViewProps {
   selectedDate: Date;
   sessions: Session[];
   onSessionClick?: (session: Session) => void;
+  onDropSession?: (sessionId: string, newDate: Date) => void;
 }
 
 const sessionStatusColors: Record<string, string> = {
@@ -23,7 +24,7 @@ const sessionStatusColors: Record<string, string> = {
 // Hours from 08:00 to 22:00
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8);
 
-export function DayView({ selectedDate, sessions, onSessionClick }: DayViewProps) {
+export function DayView({ selectedDate, sessions, onSessionClick, onDropSession }: DayViewProps) {
   const daySessions = sessions.filter((s) => 
     isSameDay(parseISO(s.scheduled_at), selectedDate)
   );
@@ -35,15 +36,24 @@ export function DayView({ selectedDate, sessions, onSessionClick }: DayViewProps
     });
   };
 
-  const getSessionPosition = (session: Session) => {
-    const sessionDate = new Date(session.scheduled_at);
-    const minutes = sessionDate.getMinutes();
-    return (minutes / 60) * 100;
+  const handleDragStart = (e: React.DragEvent, session: Session) => {
+    e.dataTransfer.setData('sessionId', session.id);
+    e.dataTransfer.effectAllowed = 'move';
   };
 
-  const getSessionHeight = (session: Session) => {
-    const duration = session.duration || 50;
-    return (duration / 60) * 100;
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, hour: number) => {
+    e.preventDefault();
+    const sessionId = e.dataTransfer.getData('sessionId');
+    if (sessionId && onDropSession) {
+      const newDate = new Date(selectedDate);
+      newDate.setHours(hour, 0, 0, 0);
+      onDropSession(sessionId, newDate);
+    }
   };
 
   return (
@@ -60,6 +70,8 @@ export function DayView({ selectedDate, sessions, onSessionClick }: DayViewProps
             <div 
               key={hour} 
               className="flex border-b border-border last:border-b-0 min-h-16"
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDrop(e, hour)}
             >
               {/* Time column */}
               <div className="w-16 flex-shrink-0 border-r border-border bg-muted/30 p-2 text-sm text-muted-foreground font-medium">
@@ -75,10 +87,12 @@ export function DayView({ selectedDate, sessions, onSessionClick }: DayViewProps
                     {hourSessions.map((session) => (
                       <div
                         key={session.id}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, session)}
                         onClick={() => onSessionClick?.(session)}
                         className={cn(
-                          'p-2 rounded cursor-pointer transition-colors border-l-4',
-                          'hover:opacity-80',
+                          'p-2 rounded cursor-pointer transition-all border-l-4',
+                          'hover:opacity-80 hover:shadow-md',
                           sessionStatusColors[session.status || 'scheduled']
                         )}
                       >

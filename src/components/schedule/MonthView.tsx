@@ -11,15 +11,19 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Calendar } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
 };
 
+type GoogleCalendarEvent = Tables<'google_calendar_events'>;
+
 interface MonthViewProps {
   currentDate: Date;
   sessions: Session[];
+  googleEvents?: GoogleCalendarEvent[];
   onDayClick?: (date: Date) => void;
   selectedDate?: Date;
 }
@@ -33,7 +37,7 @@ const sessionStatusColors: Record<string, string> = {
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-export function MonthView({ currentDate, sessions, onDayClick, selectedDate }: MonthViewProps) {
+export function MonthView({ currentDate, sessions, googleEvents = [], onDayClick, selectedDate }: MonthViewProps) {
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 });
@@ -49,6 +53,10 @@ export function MonthView({ currentDate, sessions, onDayClick, selectedDate }: M
 
   const getSessionsForDay = (date: Date) => {
     return sessions.filter((s) => isSameDay(parseISO(s.scheduled_at), date));
+  };
+
+  const getGoogleEventsForDay = (date: Date) => {
+    return googleEvents.filter((e) => isSameDay(parseISO(e.start_time), date));
   };
 
   return (
@@ -69,9 +77,11 @@ export function MonthView({ currentDate, sessions, onDayClick, selectedDate }: M
       <div className="grid grid-cols-7 gap-1">
         {days.map((dayItem) => {
           const daySessions = getSessionsForDay(dayItem);
+          const dayGoogleEvents = getGoogleEventsForDay(dayItem);
           const isCurrentMonth = isSameMonth(dayItem, currentDate);
           const isToday = isSameDay(dayItem, new Date());
           const isSelected = selectedDate && isSameDay(dayItem, selectedDate);
+          const totalItems = daySessions.length + dayGoogleEvents.length;
 
           return (
             <div
@@ -98,7 +108,7 @@ export function MonthView({ currentDate, sessions, onDayClick, selectedDate }: M
 
               {/* Session indicators */}
               <div className="space-y-1">
-                {daySessions.slice(0, 3).map((session) => (
+                {daySessions.slice(0, 2).map((session) => (
                   <div
                     key={session.id}
                     className={cn(
@@ -113,9 +123,22 @@ export function MonthView({ currentDate, sessions, onDayClick, selectedDate }: M
                     {format(new Date(session.scheduled_at), 'HH:mm')} {session.patients?.full_name?.split(' ')[0]}
                   </div>
                 ))}
-                {daySessions.length > 3 && (
+                
+                {/* Google Calendar Events */}
+                {dayGoogleEvents.slice(0, daySessions.length >= 2 ? 0 : 2 - daySessions.length).map((event) => (
+                  <div
+                    key={event.id}
+                    className="text-xs px-1 py-0.5 rounded truncate bg-accent text-accent-foreground flex items-center gap-1"
+                    title={`${event.title} - ${format(new Date(event.start_time), 'HH:mm')}`}
+                  >
+                    <Calendar className="h-2.5 w-2.5 flex-shrink-0" />
+                    <span className="truncate">{event.title}</span>
+                  </div>
+                ))}
+                
+                {totalItems > 2 && (
                   <div className="text-xs text-muted-foreground text-center">
-                    +{daySessions.length - 3} mais
+                    +{totalItems - 2} mais
                   </div>
                 )}
               </div>

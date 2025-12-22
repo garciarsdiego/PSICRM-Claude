@@ -1,15 +1,19 @@
-import { format, isSameDay, parseISO, setHours } from 'date-fns';
+import { format, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Calendar } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
 };
 
+type GoogleCalendarEvent = Tables<'google_calendar_events'>;
+
 interface DayViewProps {
   selectedDate: Date;
   sessions: Session[];
+  googleEvents?: GoogleCalendarEvent[];
   onSessionClick?: (session: Session) => void;
   onDropSession?: (sessionId: string, newDate: Date) => void;
 }
@@ -24,15 +28,26 @@ const sessionStatusColors: Record<string, string> = {
 // Hours from 08:00 to 22:00
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8);
 
-export function DayView({ selectedDate, sessions, onSessionClick, onDropSession }: DayViewProps) {
+export function DayView({ selectedDate, sessions, googleEvents = [], onSessionClick, onDropSession }: DayViewProps) {
   const daySessions = sessions.filter((s) => 
     isSameDay(parseISO(s.scheduled_at), selectedDate)
+  );
+
+  const dayGoogleEvents = googleEvents.filter((e) => 
+    isSameDay(parseISO(e.start_time), selectedDate)
   );
 
   const getSessionsForHour = (hour: number) => {
     return daySessions.filter((s) => {
       const sessionDate = new Date(s.scheduled_at);
       return sessionDate.getHours() === hour;
+    });
+  };
+
+  const getGoogleEventsForHour = (hour: number) => {
+    return dayGoogleEvents.filter((e) => {
+      const eventDate = new Date(e.start_time);
+      return eventDate.getHours() === hour;
     });
   };
 
@@ -65,6 +80,8 @@ export function DayView({ selectedDate, sessions, onSessionClick, onDropSession 
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         {HOURS.map((hour) => {
           const hourSessions = getSessionsForHour(hour);
+          const hourGoogleEvents = getGoogleEventsForHour(hour);
+          const hasItems = hourSessions.length > 0 || hourGoogleEvents.length > 0;
           
           return (
             <div 
@@ -78,12 +95,13 @@ export function DayView({ selectedDate, sessions, onSessionClick, onDropSession 
                 {String(hour).padStart(2, '0')}:00
               </div>
               
-              {/* Sessions column */}
+              {/* Sessions and events column */}
               <div className="flex-1 relative p-1">
-                {hourSessions.length === 0 ? (
+                {!hasItems ? (
                   <div className="h-full w-full" />
                 ) : (
                   <div className="space-y-1">
+                    {/* Sessions */}
                     {hourSessions.map((session) => (
                       <div
                         key={session.id}
@@ -106,6 +124,25 @@ export function DayView({ selectedDate, sessions, onSessionClick, onDropSession 
                         </div>
                         <div className="text-xs opacity-75">
                           {format(new Date(session.scheduled_at), 'HH:mm')}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Google Calendar Events */}
+                    {hourGoogleEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="p-2 rounded border-l-4 bg-accent/50 text-accent-foreground border-l-accent"
+                      >
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3 opacity-75" />
+                          <span className="font-medium text-sm truncate">
+                            {event.title}
+                          </span>
+                        </div>
+                        <div className="text-xs opacity-75">
+                          {format(new Date(event.start_time), 'HH:mm')} - {format(new Date(event.end_time), 'HH:mm')}
+                          <span className="ml-2 text-[10px]">(Google Calendar)</span>
                         </div>
                       </div>
                     ))}

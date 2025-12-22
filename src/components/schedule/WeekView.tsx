@@ -1,15 +1,19 @@
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Calendar } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
 };
 
+type GoogleCalendarEvent = Tables<'google_calendar_events'>;
+
 interface WeekViewProps {
   currentDate: Date;
   sessions: Session[];
+  googleEvents?: GoogleCalendarEvent[];
   onSessionClick?: (session: Session) => void;
   onDropSession?: (sessionId: string, newDate: Date) => void;
 }
@@ -24,7 +28,7 @@ const sessionStatusColors: Record<string, string> = {
 // Hours from 08:00 to 22:00
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8);
 
-export function WeekView({ currentDate, sessions, onSessionClick, onDropSession }: WeekViewProps) {
+export function WeekView({ currentDate, sessions, googleEvents = [], onSessionClick, onDropSession }: WeekViewProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -32,6 +36,13 @@ export function WeekView({ currentDate, sessions, onSessionClick, onDropSession 
     return sessions.filter((s) => {
       const sessionDate = parseISO(s.scheduled_at);
       return isSameDay(sessionDate, day) && sessionDate.getHours() === hour;
+    });
+  };
+
+  const getGoogleEventsForDayAndHour = (day: Date, hour: number) => {
+    return googleEvents.filter((e) => {
+      const eventDate = parseISO(e.start_time);
+      return isSameDay(eventDate, day) && eventDate.getHours() === hour;
     });
   };
 
@@ -99,6 +110,7 @@ export function WeekView({ currentDate, sessions, onSessionClick, onDropSession 
               {/* Day columns */}
               {weekDays.map((day) => {
                 const hourSessions = getSessionsForDayAndHour(day, hour);
+                const hourGoogleEvents = getGoogleEventsForDayAndHour(day, hour);
                 
                 return (
                   <div
@@ -110,6 +122,7 @@ export function WeekView({ currentDate, sessions, onSessionClick, onDropSession 
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, day, hour)}
                   >
+                    {/* Sessions */}
                     {hourSessions.map((session) => (
                       <div
                         key={session.id}
@@ -117,7 +130,7 @@ export function WeekView({ currentDate, sessions, onSessionClick, onDropSession 
                         onDragStart={(e) => handleDragStart(e, session)}
                         onClick={() => onSessionClick?.(session)}
                         className={cn(
-                          'p-1.5 rounded text-xs cursor-pointer transition-all border-l-4',
+                          'p-1.5 rounded text-xs cursor-pointer transition-all border-l-4 mb-1',
                           'hover:opacity-80 hover:shadow-md',
                           sessionStatusColors[session.status || 'scheduled']
                         )}
@@ -127,6 +140,24 @@ export function WeekView({ currentDate, sessions, onSessionClick, onDropSession 
                         </div>
                         <div className="text-[10px] opacity-75">
                           {format(new Date(session.scheduled_at), 'HH:mm')} - {session.duration}min
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {/* Google Calendar Events */}
+                    {hourGoogleEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="p-1.5 rounded text-xs border-l-4 bg-accent/50 text-accent-foreground border-l-accent mb-1"
+                      >
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-2.5 w-2.5 opacity-75" />
+                          <span className="font-medium truncate text-[11px]">
+                            {event.title}
+                          </span>
+                        </div>
+                        <div className="text-[10px] opacity-75">
+                          {format(new Date(event.start_time), 'HH:mm')}
                         </div>
                       </div>
                     ))}

@@ -57,6 +57,7 @@ import {
   UserCheck,
   Upload,
   FileText,
+  Download,
   Users,
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -491,15 +492,38 @@ export default function Patients() {
 
   // Import patients mutation
   const importPatients = useMutation({
-    mutationFn: async (patients: Array<{ full_name: string; email?: string; phone?: string; session_price?: number }>) => {
+    mutationFn: async (patientsData: Array<{
+      full_name: string;
+      email?: string;
+      phone?: string;
+      session_price?: number;
+      birth_date?: string;
+      address?: string;
+      city?: string;
+      state?: string;
+      zip_code?: string;
+      cpf?: string;
+      emergency_contact?: string;
+      emergency_phone?: string;
+      clinical_notes?: string;
+    }>) => {
       if (!profile?.user_id) throw new Error('Usuário não autenticado');
       
-      const patientsToInsert = patients.map(p => ({
+      const patientsToInsert = patientsData.map(p => ({
         professional_id: profile.user_id,
         full_name: p.full_name.trim(),
         email: p.email?.trim() || null,
         phone: p.phone?.trim() || null,
         session_price: p.session_price || null,
+        birth_date: p.birth_date?.trim() || null,
+        address: p.address?.trim() || null,
+        city: p.city?.trim() || null,
+        state: p.state?.trim() || null,
+        zip_code: p.zip_code?.trim() || null,
+        cpf: p.cpf?.trim() || null,
+        emergency_contact: p.emergency_contact?.trim() || null,
+        emergency_phone: p.emergency_phone?.trim() || null,
+        clinical_notes: p.clinical_notes?.trim() || null,
         is_active: true,
       }));
       
@@ -522,7 +546,7 @@ export default function Patients() {
     },
   });
 
-  const parseCSV = (text: string): Array<{ full_name: string; email?: string; phone?: string; session_price?: number }> => {
+  const parseCSV = (text: string) => {
     const lines = text.trim().split('\n');
     if (lines.length === 0) return [];
     
@@ -540,12 +564,21 @@ export default function Patients() {
           email: parts[1] || undefined,
           phone: parts[2] || undefined,
           session_price: parts[3] ? parseFloat(parts[3]) : undefined,
+          birth_date: parts[4] || undefined,
+          cpf: parts[5] || undefined,
+          address: parts[6] || undefined,
+          city: parts[7] || undefined,
+          state: parts[8] || undefined,
+          zip_code: parts[9] || undefined,
+          emergency_contact: parts[10] || undefined,
+          emergency_phone: parts[11] || undefined,
+          clinical_notes: parts[12] || undefined,
         };
       })
       .filter(p => p.full_name);
   };
 
-  const parseText = (text: string): Array<{ full_name: string; email?: string; phone?: string }> => {
+  const parseText = (text: string) => {
     const lines = text.trim().split('\n');
     return lines
       .filter(line => line.trim())
@@ -559,6 +592,61 @@ export default function Patients() {
         return { full_name: name, email };
       })
       .filter(p => p.full_name);
+  };
+
+  const downloadTemplate = () => {
+    const headers = 'nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes';
+    const example = 'João Silva,joao@email.com,(11) 99999-9999,200,1990-01-15,123.456.789-00,Rua Exemplo 123,São Paulo,SP,01234-567,Maria Silva,(11) 98888-8888,Observações do paciente';
+    const content = `${headers}\n${example}`;
+    
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'template_pacientes.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: 'Template baixado!' });
+  };
+
+  const exportPatientsToCSV = () => {
+    const headers = 'nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes,status';
+    
+    const rows = patients.map(p => {
+      const escape = (val: string | null | undefined) => {
+        if (!val) return '';
+        // Escape quotes and wrap in quotes if contains comma
+        const escaped = val.replace(/"/g, '""');
+        return escaped.includes(',') || escaped.includes('"') ? `"${escaped}"` : escaped;
+      };
+      
+      return [
+        escape(p.full_name),
+        escape(p.email),
+        escape(p.phone),
+        p.session_price?.toString() || '',
+        escape(p.birth_date),
+        escape(p.cpf),
+        escape(p.address),
+        escape(p.city),
+        escape(p.state),
+        escape(p.zip_code),
+        escape(p.emergency_contact),
+        escape(p.emergency_phone),
+        escape(p.clinical_notes),
+        p.is_active ? 'ativo' : 'inativo',
+      ].join(',');
+    });
+    
+    const content = `${headers}\n${rows.join('\n')}`;
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `pacientes_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: `${patients.length} pacientes exportados!` });
   };
 
   const handleImport = async () => {
@@ -703,6 +791,10 @@ export default function Patients() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={exportPatientsToCSV}>
+              <Download className="mr-2 h-4 w-4" />
+              Exportar
+            </Button>
             <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
               <Upload className="mr-2 h-4 w-4" />
               Importar
@@ -1566,27 +1658,34 @@ export default function Patients() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="csv" className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Carregar arquivo CSV</Label>
-                  <Input
-                    type="file"
-                    accept=".csv,.txt"
-                    onChange={handleFileUpload}
-                  />
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-2">
+                    <Label>Carregar arquivo CSV</Label>
+                    <Input
+                      type="file"
+                      accept=".csv,.txt"
+                      onChange={handleFileUpload}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button variant="outline" onClick={downloadTemplate}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Baixar Template
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Ou cole os dados CSV</Label>
                   <Textarea
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
-                    placeholder="Nome,Email,Telefone,Valor da Sessão&#10;João Silva,joao@email.com,(11) 99999-9999,200&#10;Maria Santos,maria@email.com,(11) 88888-8888,250"
+                    placeholder="nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes&#10;João Silva,joao@email.com,(11) 99999-9999,200,1990-01-15,123.456.789-00,Rua A,SP,SP,01234-567,Maria,(11) 8888-8888,Obs"
                     rows={8}
                     className="font-mono text-sm"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Formato: Nome, Email (opcional), Telefone (opcional), Valor (opcional).
-                  Separador: vírgula ou ponto e vírgula.
+                  Campos: Nome, Email, Telefone, Valor, Data Nascimento (AAAA-MM-DD), CPF, Endereço, Cidade, Estado, CEP, Contato Emergência, Tel. Emergência, Observações.
                 </p>
               </TabsContent>
               <TabsContent value="text" className="space-y-4">

@@ -24,20 +24,36 @@ export default function PatientMessages() {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch patient record with professional info
+  // Fetch patient record
   const { data: patientRecord } = useQuery({
-    queryKey: ['patient-record-with-prof', user?.id],
+    queryKey: ['patient-record', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('patients')
-        .select('*, profiles:professional_id(full_name, email, specialty)')
+        .select('*')
         .eq('user_id', user.id)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
     enabled: !!user?.id,
+  });
+
+  // Fetch professional profile
+  const { data: professionalProfile } = useQuery({
+    queryKey: ['professional-profile', patientRecord?.professional_id],
+    queryFn: async () => {
+      if (!patientRecord?.professional_id) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name, email, specialty')
+        .eq('user_id', patientRecord.professional_id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!patientRecord?.professional_id,
   });
 
   // Fetch messages
@@ -115,13 +131,14 @@ export default function PatientMessages() {
     }
   };
 
-  const professionalName = (patientRecord as any)?.profiles?.full_name || 'Seu Profissional';
+  const professionalName = professionalProfile?.full_name || 'Seu Profissional';
   const professionalInitials = professionalName
     .split(' ')
     .map((n: string) => n[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
+  const professionalSpecialty = professionalProfile?.specialty || 'Psicólogo(a)';
 
   return (
     <PatientLayout>
@@ -155,7 +172,7 @@ export default function PatientMessages() {
                   <div>
                     <CardTitle className="text-lg">{professionalName}</CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      {(patientRecord as any)?.profiles?.specialty || 'Psicólogo(a)'}
+                      {professionalSpecialty}
                     </p>
                   </div>
                 </div>

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfQuarter, endOfQuarter, startOfYear, endOfYear, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { FinancialChart } from '@/components/financial/FinancialChart';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,8 @@ import {
   Pencil,
   Trash2,
   Loader2,
+  Filter,
+  BarChart3,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -112,6 +115,10 @@ export default function Financial() {
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
   const [bulkEditStatus, setBulkEditStatus] = useState<string>('');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
+  // Filters
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'month' | 'quarter' | 'year'>('all');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<'all' | 'pending' | 'paid' | 'overdue' | 'cancelled'>('all');
 
   // Fetch sessions with payment info
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
@@ -295,16 +302,75 @@ export default function Financial() {
     setIsEditDialogOpen(true);
   };
 
-  // Calculate totals
-  const totalReceived = sessions
+  // Filter sessions based on period and payment status
+  const filteredSessions = useMemo(() => {
+    let filtered = [...sessions];
+    const now = new Date();
+
+    // Apply period filter
+    if (periodFilter !== 'all') {
+      let startDate: Date;
+      let endDate: Date;
+
+      if (periodFilter === 'month') {
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+      } else if (periodFilter === 'quarter') {
+        startDate = startOfQuarter(now);
+        endDate = endOfQuarter(now);
+      } else {
+        startDate = startOfYear(now);
+        endDate = endOfYear(now);
+      }
+
+      filtered = filtered.filter((s) => {
+        const sessionDate = new Date(s.scheduled_at);
+        return sessionDate >= startDate && sessionDate <= endDate;
+      });
+    }
+
+    // Apply payment status filter
+    if (paymentStatusFilter !== 'all') {
+      filtered = filtered.filter((s) => s.payment_status === paymentStatusFilter);
+    }
+
+    return filtered;
+  }, [sessions, periodFilter, paymentStatusFilter]);
+
+  // Calculate totals from filtered sessions
+  const totalReceived = filteredSessions
     .filter((s) => s.payment_status === 'paid')
     .reduce((acc, s) => acc + Number(s.price), 0);
 
-  const totalPending = sessions
+  const totalPending = filteredSessions
     .filter((s) => s.payment_status === 'pending' || s.payment_status === 'overdue')
     .reduce((acc, s) => acc + Number(s.price), 0);
 
-  const totalExpenses = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
+  const filteredExpenses = useMemo(() => {
+    if (periodFilter === 'all') return expenses;
+    
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date;
+
+    if (periodFilter === 'month') {
+      startDate = startOfMonth(now);
+      endDate = endOfMonth(now);
+    } else if (periodFilter === 'quarter') {
+      startDate = startOfQuarter(now);
+      endDate = endOfQuarter(now);
+    } else {
+      startDate = startOfYear(now);
+      endDate = endOfYear(now);
+    }
+
+    return expenses.filter((e) => {
+      const expenseDate = parseISO(e.expense_date);
+      return expenseDate >= startDate && expenseDate <= endDate;
+    });
+  }, [expenses, periodFilter]);
+
+  const totalExpenses = filteredExpenses.reduce((acc, e) => acc + Number(e.amount), 0);
 
   const netProfit = totalReceived - totalExpenses;
 
@@ -397,6 +463,10 @@ export default function Financial() {
           <TabsList>
             <TabsTrigger value="sessions">Sessões</TabsTrigger>
             <TabsTrigger value="expenses">Despesas</TabsTrigger>
+            <TabsTrigger value="charts" className="flex items-center gap-1">
+              <BarChart3 className="h-4 w-4" />
+              Gráficos
+            </TabsTrigger>
             <TabsTrigger value="report">Relatório</TabsTrigger>
           </TabsList>
 
@@ -438,18 +508,68 @@ export default function Financial() {
               </Card>
             )}
 
+            {/* Filters */}
+            <Card>
+              <CardContent className="py-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">Filtros:</span>
+                  </div>
+                  <Select value={periodFilter} onValueChange={(value: 'all' | 'month' | 'quarter' | 'year') => setPeriodFilter(value)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Período" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os períodos</SelectItem>
+                      <SelectItem value="month">Este mês</SelectItem>
+                      <SelectItem value="quarter">Este trimestre</SelectItem>
+                      <SelectItem value="year">Este ano</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={paymentStatusFilter} onValueChange={(value: 'all' | 'pending' | 'paid' | 'overdue' | 'cancelled') => setPaymentStatusFilter(value)}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os status</SelectItem>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="paid">Pago</SelectItem>
+                      <SelectItem value="overdue">Atrasado</SelectItem>
+                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(periodFilter !== 'all' || paymentStatusFilter !== 'all') && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setPeriodFilter('all');
+                        setPaymentStatusFilter('all');
+                      }}
+                    >
+                      Limpar filtros
+                    </Button>
+                  )}
+                  <Badge variant="outline" className="ml-auto">
+                    {filteredSessions.length} sessões
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardContent className="pt-6">
                 {loadingSessions ? (
                   <p className="text-center text-muted-foreground py-8">Carregando...</p>
-                ) : sessions.length === 0 ? (
+                ) : filteredSessions.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">
                     Nenhuma sessão encontrada
                   </p>
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-4">
-                      <Button variant="outline" size="sm" onClick={selectAllSessions}>
+                      <Button variant="outline" size="sm" onClick={() => setSelectedSessions(filteredSessions.map(s => s.id))}>
                         Selecionar todas
                       </Button>
                     </div>
@@ -458,9 +578,9 @@ export default function Financial() {
                         <TableRow>
                           <TableHead className="w-12">
                             <Checkbox
-                              checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                              checked={selectedSessions.length === filteredSessions.length && filteredSessions.length > 0}
                               onCheckedChange={(checked) => {
-                                if (checked) selectAllSessions();
+                                if (checked) setSelectedSessions(filteredSessions.map(s => s.id));
                                 else deselectAllSessions();
                               }}
                             />
@@ -473,7 +593,7 @@ export default function Financial() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sessions.map((session) => (
+                        {filteredSessions.map((session) => (
                           <TableRow key={session.id}>
                             <TableCell>
                               <Checkbox
@@ -661,6 +781,11 @@ export default function Financial() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Charts Tab */}
+          <TabsContent value="charts" className="space-y-4">
+            <FinancialChart sessions={sessions} expenses={expenses} months={6} />
           </TabsContent>
 
           {/* Report Tab */}

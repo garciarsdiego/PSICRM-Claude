@@ -42,7 +42,9 @@ import { BlockedSlots } from '@/components/schedule/BlockedSlots';
 import { GoogleCalendarIntegration } from '@/components/schedule/GoogleCalendarIntegration';
 import { CalendarHeader, CalendarViewType } from '@/components/schedule/CalendarHeader';
 import { DayView } from '@/components/schedule/DayView';
+import { WeekView } from '@/components/schedule/WeekView';
 import { MonthView } from '@/components/schedule/MonthView';
+import { SessionDetailModal } from '@/components/schedule/SessionDetailModal';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
@@ -72,6 +74,8 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewType, setViewType] = useState<CalendarViewType>('day');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [newSession, setNewSession] = useState({
     patient_id: '',
     scheduled_at: '',
@@ -221,6 +225,59 @@ export default function Schedule() {
     },
   });
 
+  // Update session mutation (for editing)
+  const updateSession = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<Session> }) => {
+      const { error } = await supabase
+        .from('sessions')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      toast({ title: 'Sessão atualizada!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao atualizar sessão', variant: 'destructive' });
+    },
+  });
+
+  // Reschedule session mutation (for drag & drop)
+  const rescheduleSession = useMutation({
+    mutationFn: async ({ id, newDate }: { id: string; newDate: Date }) => {
+      const { error } = await supabase
+        .from('sessions')
+        .update({ scheduled_at: newDate.toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      toast({ title: 'Sessão reagendada!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao reagendar sessão', variant: 'destructive' });
+    },
+  });
+
+  const handleSessionClick = (session: Session) => {
+    setSelectedSession(session);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleDropSession = (sessionId: string, newDate: Date) => {
+    rescheduleSession.mutate({ id: sessionId, newDate });
+  };
+
+  const handleUpdateSession = (id: string, updates: Partial<Session>) => {
+    updateSession.mutate({ id, updates });
+  };
+
+  const handleStatusChange = (id: string, status: string) => {
+    updateSessionStatus.mutate({ id, status });
+  };
+
 
   const futureSessions = sessions.filter(
     (s) => new Date(s.scheduled_at) >= new Date() && s.status === 'scheduled'
@@ -364,12 +421,23 @@ export default function Schedule() {
                 />
               </CardHeader>
               <CardContent>
-                {viewType === 'day' ? (
+                {viewType === 'day' && (
                   <DayView
                     selectedDate={selectedDate}
                     sessions={sessions}
+                    onSessionClick={handleSessionClick}
+                    onDropSession={handleDropSession}
                   />
-                ) : (
+                )}
+                {viewType === 'week' && (
+                  <WeekView
+                    currentDate={currentDate}
+                    sessions={sessions}
+                    onSessionClick={handleSessionClick}
+                    onDropSession={handleDropSession}
+                  />
+                )}
+                {viewType === 'month' && (
                   <MonthView
                     currentDate={currentDate}
                     sessions={sessions}
@@ -499,6 +567,15 @@ export default function Schedule() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Session Detail Modal */}
+        <SessionDetailModal
+          session={selectedSession}
+          open={isDetailModalOpen}
+          onOpenChange={setIsDetailModalOpen}
+          onUpdate={handleUpdateSession}
+          onStatusChange={handleStatusChange}
+        />
       </div>
     </AppLayout>
   );

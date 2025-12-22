@@ -89,9 +89,12 @@ export default function Patients() {
   
   // Session scheduling state
   const [scheduleSession, setScheduleSession] = useState(false);
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(false);
   const [sessionData, setSessionData] = useState({
     scheduled_at: '',
     recurrence_type: 'none' as 'none' | 'weekly' | 'biweekly' | 'monthly',
+    duration: 50,
+    price: '',
   });
 
   // Fetch patients
@@ -178,49 +181,94 @@ export default function Patients() {
       }
 
       // Create sessions if scheduling is enabled (only for new patients)
+      let firstSessionMeetLink: string | null = null;
       if (!selectedPatient && scheduleSession && sessionData.scheduled_at) {
         const scheduledDate = new Date(sessionData.scheduled_at);
         const recurringDates = generateRecurringDates(scheduledDate, sessionData.recurrence_type);
         
-        const sessionPrice = data.session_price ? parseFloat(data.session_price) : profile.session_price || 0;
+        const sessionPrice = sessionData.price 
+          ? parseFloat(sessionData.price) 
+          : (data.session_price ? parseFloat(data.session_price) : profile.session_price || 0);
+        const sessionDuration = sessionData.duration || profile.session_duration || 50;
         
         const sessionsToInsert = recurringDates.map((date) => ({
           professional_id: profile.user_id,
           patient_id: patientId,
           scheduled_at: date.toISOString(),
-          duration: profile.session_duration || 50,
+          duration: sessionDuration,
           price: Number(sessionPrice),
           is_recurring: sessionData.recurrence_type !== 'none',
           recurrence_rule: sessionData.recurrence_type !== 'none' ? sessionData.recurrence_type : null,
           title: `Sessão - ${data.full_name}`,
         }));
         
-        const { error: sessionError } = await supabase.from('sessions').insert(sessionsToInsert);
+        const { data: createdSessions, error: sessionError } = await supabase
+          .from('sessions')
+          .insert(sessionsToInsert)
+          .select('meet_link');
         if (sessionError) throw sessionError;
         
-        return { isNew: true, sessionsCreated: recurringDates.length };
+        // Get meet link from first session if available
+        if (createdSessions && createdSessions.length > 0) {
+          firstSessionMeetLink = createdSessions[0].meet_link;
+        }
       }
 
-      return { isNew: !selectedPatient, sessionsCreated: 0 };
+      // Send welcome email if enabled
+      if (!selectedPatient && sendWelcomeEmail && data.email) {
+        try {
+          const welcomeData: any = {
+            patient_name: data.full_name,
+            session_duration: sessionData.duration || profile.session_duration || 50,
+          };
+          
+          if (scheduleSession && sessionData.scheduled_at) {
+            const scheduledDate = new Date(sessionData.scheduled_at);
+            welcomeData.first_session_date = format(scheduledDate, 'dd/MM/yyyy', { locale: ptBR });
+            welcomeData.first_session_time = format(scheduledDate, 'HH:mm');
+            welcomeData.meet_link = firstSessionMeetLink;
+          }
+
+          await supabase.functions.invoke('send-gmail', {
+            body: {
+              professional_id: profile.user_id,
+              to: data.email,
+              template: 'welcome',
+              data: welcomeData,
+            },
+          });
+        } catch (emailError) {
+          console.error('Error sending welcome email:', emailError);
+          // Don't fail the whole operation if email fails
+        }
+      }
+
+      return { 
+        isNew: !selectedPatient, 
+        sessionsCreated: scheduleSession && sessionData.scheduled_at 
+          ? generateRecurringDates(new Date(sessionData.scheduled_at), sessionData.recurrence_type).length 
+          : 0,
+        emailSent: sendWelcomeEmail && data.email,
+      };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       closeDialog();
       
+      let message = selectedPatient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!';
+      
       if (result?.sessionsCreated && result.sessionsCreated > 0) {
-        toast({
-          title: result.sessionsCreated > 1
-            ? `Paciente cadastrado e ${result.sessionsCreated} sessões agendadas!`
-            : 'Paciente cadastrado e sessão agendada!',
-        });
-      } else {
-        toast({
-          title: selectedPatient
-            ? 'Paciente atualizado com sucesso!'
-            : 'Paciente cadastrado com sucesso!',
-        });
+        message = result.sessionsCreated > 1
+          ? `Paciente cadastrado e ${result.sessionsCreated} sessões agendadas!`
+          : 'Paciente cadastrado e sessão agendada!';
       }
+      
+      if (result?.emailSent) {
+        message += ' E-mail de boas-vindas enviado.';
+      }
+      
+      toast({ title: message });
     },
     onError: (error) => {
       console.error('Error saving patient:', error);
@@ -372,7 +420,8 @@ export default function Patients() {
     setSelectedPatient(null);
     setIsViewMode(false);
     setScheduleSession(false);
-    setSessionData({ scheduled_at: '', recurrence_type: 'none' });
+    setSendWelcomeEmail(false);
+    setSessionData({ scheduled_at: '', recurrence_type: 'none', duration: 50, price: '' });
   };
 
   const openLinkDialog = (patient: Patient) => {
@@ -832,6 +881,32 @@ export default function Patients() {
                         )}
                       </div>
                       
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Duração (min)</Label>
+                          <Input
+                            type="number"
+                            value={sessionData.duration}
+                            onChange={(e) =>
+                              setSessionData({ ...sessionData, duration: parseInt(e.target.value) || 50 })
+                            }
+                            placeholder="50"
+                          />
+                        </div>
+                        <div>
+                          <Label>Valor (R$)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={sessionData.price}
+                            onChange={(e) =>
+                              setSessionData({ ...sessionData, price: e.target.value })
+                            }
+                            placeholder="Valor padrão"
+                          />
+                        </div>
+                      </div>
+                      
                       <div>
                         <Label>Recorrência</Label>
                         <Select
@@ -858,6 +933,27 @@ export default function Patients() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Send Welcome Email - Only for new patients with email */}
+              {!selectedPatient && !isViewMode && formData.email && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <h3 className="font-semibold">Enviar E-mail de Boas-vindas</h3>
+                        <p className="text-xs text-muted-foreground">
+                          Um e-mail será enviado para {formData.email}
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={sendWelcomeEmail}
+                      onCheckedChange={setSendWelcomeEmail}
+                    />
+                  </div>
                 </div>
               )}
 

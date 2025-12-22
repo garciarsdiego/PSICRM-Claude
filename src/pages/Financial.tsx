@@ -9,13 +9,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Select,
   SelectContent,
@@ -42,8 +54,10 @@ import {
   Plus,
   Check,
   Clock,
-  AlertCircle,
   Download,
+  Pencil,
+  Trash2,
+  Loader2,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -89,6 +103,15 @@ export default function Financial() {
     expense_date: format(new Date(), 'yyyy-MM-dd'),
     notes: '',
   });
+
+  // Session selection and editing state
+  const [selectedSessions, setSelectedSessions] = useState<string[]>([]);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [editSessionData, setEditSessionData] = useState({ price: '', payment_status: '' });
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
+  const [bulkEditStatus, setBulkEditStatus] = useState<string>('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   // Fetch sessions with payment info
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
@@ -153,7 +176,83 @@ export default function Financial() {
     },
   });
 
-  // Update payment status mutation
+  // Update session mutation
+  const updateSession = useMutation({
+    mutationFn: async ({ id, price, payment_status }: { id: string; price: number; payment_status: string }) => {
+      const updateData: Record<string, unknown> = { 
+        price,
+        payment_status 
+      };
+      if (payment_status === 'paid') {
+        updateData.paid_at = new Date().toISOString();
+      } else {
+        updateData.paid_at = null;
+      }
+      const { error } = await supabase
+        .from('sessions')
+        .update(updateData)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions-financial'] });
+      setIsEditDialogOpen(false);
+      setEditingSession(null);
+      toast({ title: 'Sessão atualizada com sucesso!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao atualizar sessão', variant: 'destructive' });
+    },
+  });
+
+  // Bulk update sessions mutation
+  const bulkUpdateSessions = useMutation({
+    mutationFn: async ({ ids, payment_status }: { ids: string[]; payment_status: string }) => {
+      const updateData: Record<string, unknown> = { payment_status };
+      if (payment_status === 'paid') {
+        updateData.paid_at = new Date().toISOString();
+      } else {
+        updateData.paid_at = null;
+      }
+      const { error } = await supabase
+        .from('sessions')
+        .update(updateData)
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions-financial'] });
+      setIsBulkEditDialogOpen(false);
+      setSelectedSessions([]);
+      setBulkEditStatus('');
+      toast({ title: `${selectedSessions.length} sessões atualizadas!` });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao atualizar sessões', variant: 'destructive' });
+    },
+  });
+
+  // Delete sessions mutation
+  const deleteSessions = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from('sessions')
+        .delete()
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions-financial'] });
+      setIsDeleteDialogOpen(false);
+      setSelectedSessions([]);
+      toast({ title: 'Sessões excluídas com sucesso!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao excluir sessões', variant: 'destructive' });
+    },
+  });
+
+  // Update payment status mutation (quick action)
   const updatePaymentStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const updateData: Record<string, unknown> = { payment_status: status };
@@ -171,6 +270,30 @@ export default function Financial() {
       toast({ title: 'Status de pagamento atualizado!' });
     },
   });
+
+  // Selection helpers
+  const toggleSessionSelection = (id: string) => {
+    setSelectedSessions(prev =>
+      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllSessions = () => {
+    setSelectedSessions(sessions.map(s => s.id));
+  };
+
+  const deselectAllSessions = () => {
+    setSelectedSessions([]);
+  };
+
+  const openEditDialog = (session: Session) => {
+    setEditingSession(session);
+    setEditSessionData({
+      price: String(session.price),
+      payment_status: session.payment_status || 'pending',
+    });
+    setIsEditDialogOpen(true);
+  };
 
   // Calculate totals
   const totalReceived = sessions
@@ -279,6 +402,42 @@ export default function Financial() {
 
           {/* Sessions Tab */}
           <TabsContent value="sessions" className="space-y-4">
+            {/* Bulk Actions */}
+            {selectedSessions.length > 0 && (
+              <Card>
+                <CardContent className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <Badge variant="secondary">
+                        {selectedSessions.length} selecionadas
+                      </Badge>
+                      <Button variant="outline" size="sm" onClick={deselectAllSessions}>
+                        Limpar seleção
+                      </Button>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsBulkEditDialogOpen(true)}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />
+                        Editar Status
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setIsDeleteDialogOpen(true)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardContent className="pt-6">
                 {loadingSessions ? (
@@ -288,55 +447,85 @@ export default function Financial() {
                     Nenhuma sessão encontrada
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Paciente</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sessions.map((session) => (
-                        <TableRow key={session.id}>
-                          <TableCell>
-                            {format(new Date(session.scheduled_at), "dd/MM/yyyy 'às' HH:mm", {
-                              locale: ptBR,
-                            })}
-                          </TableCell>
-                          <TableCell>{session.patients?.full_name || 'N/A'}</TableCell>
-                          <TableCell>R$ {Number(session.price).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={paymentStatusColors[session.payment_status || 'pending']}
-                            >
-                              {paymentStatusLabels[session.payment_status || 'pending']}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {session.payment_status !== 'paid' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() =>
-                                  updatePaymentStatus.mutate({
-                                    id: session.id,
-                                    status: 'paid',
-                                  })
-                                }
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                Marcar Pago
-                              </Button>
-                            )}
-                          </TableCell>
+                  <>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Button variant="outline" size="sm" onClick={selectAllSessions}>
+                        Selecionar todas
+                      </Button>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={selectedSessions.length === sessions.length && sessions.length > 0}
+                              onCheckedChange={(checked) => {
+                                if (checked) selectAllSessions();
+                                else deselectAllSessions();
+                              }}
+                            />
+                          </TableHead>
+                          <TableHead>Data</TableHead>
+                          <TableHead>Paciente</TableHead>
+                          <TableHead>Valor</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Ações</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {sessions.map((session) => (
+                          <TableRow key={session.id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedSessions.includes(session.id)}
+                                onCheckedChange={() => toggleSessionSelection(session.id)}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {format(new Date(session.scheduled_at), "dd/MM/yyyy 'às' HH:mm", {
+                                locale: ptBR,
+                              })}
+                            </TableCell>
+                            <TableCell>{session.patients?.full_name || 'N/A'}</TableCell>
+                            <TableCell>R$ {Number(session.price).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={paymentStatusColors[session.payment_status || 'pending']}
+                              >
+                                {paymentStatusLabels[session.payment_status || 'pending']}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => openEditDialog(session)}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                {session.payment_status !== 'paid' && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      updatePaymentStatus.mutate({
+                                        id: session.id,
+                                        status: 'paid',
+                                      })
+                                    }
+                                  >
+                                    <Check className="h-4 w-4" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -538,6 +727,149 @@ export default function Financial() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Edit Session Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Sessão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Paciente</Label>
+              <Input value={editingSession?.patients?.full_name || 'N/A'} disabled />
+            </div>
+            <div>
+              <Label>Data</Label>
+              <Input
+                value={editingSession ? format(new Date(editingSession.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : ''}
+                disabled
+              />
+            </div>
+            <div>
+              <Label>Valor (R$)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editSessionData.price}
+                onChange={(e) => setEditSessionData({ ...editSessionData, price: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label>Status de Pagamento</Label>
+              <Select
+                value={editSessionData.payment_status}
+                onValueChange={(value) => setEditSessionData({ ...editSessionData, payment_status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Atrasado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingSession) {
+                  updateSession.mutate({
+                    id: editingSession.id,
+                    price: parseFloat(editSessionData.price),
+                    payment_status: editSessionData.payment_status,
+                  });
+                }
+              }}
+              disabled={updateSession.isPending}
+            >
+              {updateSession.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Salvar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Edit Dialog */}
+      <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar {selectedSessions.length} Sessões</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Novo Status de Pagamento</Label>
+              <Select value={bulkEditStatus} onValueChange={setBulkEditStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="paid">Pago</SelectItem>
+                  <SelectItem value="overdue">Atrasado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsBulkEditDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (bulkEditStatus) {
+                  bulkUpdateSessions.mutate({
+                    ids: selectedSessions,
+                    payment_status: bulkEditStatus,
+                  });
+                }
+              }}
+              disabled={!bulkEditStatus || bulkUpdateSessions.isPending}
+            >
+              {bulkUpdateSessions.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Atualizar Todas'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir {selectedSessions.length} sessão(ões)? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteSessions.mutate(selectedSessions)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteSessions.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Excluir'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

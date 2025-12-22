@@ -76,6 +76,10 @@ export function TimeSlotPicker({ onSelect, selectedDate: externalSelectedDate }:
     enabled: !!profile?.user_id,
   });
 
+  // Get scheduling settings from profile
+  const allowParallelSessions = (profile as any)?.allow_parallel_sessions ?? false;
+  const bufferBetweenSessions = (profile as any)?.buffer_between_sessions ?? 0;
+
   // Fetch blocked slots
   const { data: blockedSlots = [] } = useQuery({
     queryKey: ['blocked-slots', profile?.user_id, weekStart],
@@ -156,10 +160,24 @@ export function TimeSlotPicker({ onSelect, selectedDate: externalSelectedDate }:
   };
 
   const isSlotBooked = (date: Date, time: string) => {
-    return existingSessions.some((session) =>
-      isSameDay(new Date(session.scheduled_at), date) &&
-      format(new Date(session.scheduled_at), 'HH:mm') === time
-    );
+    // If parallel sessions allowed, slot is never "booked"
+    if (allowParallelSessions) return false;
+    
+    const [slotHour, slotMin] = time.split(':').map(Number);
+    const slotStartMinutes = slotHour * 60 + slotMin;
+    const sessionDuration = profile?.session_duration || 50;
+    const slotEndMinutes = slotStartMinutes + sessionDuration;
+    
+    return existingSessions.some((session) => {
+      if (!isSameDay(new Date(session.scheduled_at), date)) return false;
+      
+      const sessionStart = new Date(session.scheduled_at);
+      const sessionStartMinutes = sessionStart.getHours() * 60 + sessionStart.getMinutes();
+      const sessionEndMinutes = sessionStartMinutes + sessionDuration + bufferBetweenSessions;
+      
+      // Check if there's any overlap considering buffer
+      return (slotStartMinutes < sessionEndMinutes && slotEndMinutes > sessionStartMinutes);
+    });
   };
 
   const isPastDate = (date: Date) => {

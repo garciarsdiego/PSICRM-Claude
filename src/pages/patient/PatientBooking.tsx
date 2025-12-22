@@ -90,7 +90,7 @@ export default function PatientBooking() {
       if (!patientRecord?.professional_id) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('session_duration, session_price')
+        .select('session_duration, session_price, allow_parallel_sessions, buffer_between_sessions')
         .eq('user_id', patientRecord.professional_id)
         .maybeSingle();
       if (error) throw error;
@@ -98,6 +98,9 @@ export default function PatientBooking() {
     },
     enabled: !!patientRecord?.professional_id,
   });
+
+  const allowParallelSessions = (professionalProfile as any)?.allow_parallel_sessions ?? false;
+  const bufferBetweenSessions = (professionalProfile as any)?.buffer_between_sessions ?? 0;
 
   // Fetch professional availability
   const { data: availability = [] } = useQuery({
@@ -232,10 +235,24 @@ export default function PatientBooking() {
   };
 
   const isSlotBooked = (date: Date, time: string) => {
-    return existingSessions.some((session) =>
-      isSameDay(new Date(session.scheduled_at), date) &&
-      format(new Date(session.scheduled_at), 'HH:mm') === time
-    );
+    // If parallel sessions allowed, slot is never "booked"
+    if (allowParallelSessions) return false;
+    
+    const [slotHour, slotMin] = time.split(':').map(Number);
+    const slotStartMinutes = slotHour * 60 + slotMin;
+    const sessionDuration = professionalProfile?.session_duration || 50;
+    const slotEndMinutes = slotStartMinutes + sessionDuration;
+    
+    return existingSessions.some((session) => {
+      if (!isSameDay(new Date(session.scheduled_at), date)) return false;
+      
+      const sessionStart = new Date(session.scheduled_at);
+      const sessionStartMinutes = sessionStart.getHours() * 60 + sessionStart.getMinutes();
+      const sessionEndMinutes = sessionStartMinutes + sessionDuration + bufferBetweenSessions;
+      
+      // Check if there's any overlap considering buffer
+      return (slotStartMinutes < sessionEndMinutes && slotEndMinutes > sessionStartMinutes);
+    });
   };
 
   const isPastDate = (date: Date) => {

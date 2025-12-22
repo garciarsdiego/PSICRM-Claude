@@ -432,8 +432,10 @@ export type Database = {
       profiles: {
         Row: {
           address: string | null
+          allow_parallel_sessions: boolean | null
           avatar_url: string | null
           bio: string | null
+          buffer_between_sessions: number | null
           city: string | null
           created_at: string
           crp: string | null
@@ -452,8 +454,10 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          allow_parallel_sessions?: boolean | null
           avatar_url?: string | null
           bio?: string | null
+          buffer_between_sessions?: number | null
           city?: string | null
           created_at?: string
           crp?: string | null
@@ -472,8 +476,10 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          allow_parallel_sessions?: boolean | null
           avatar_url?: string | null
           bio?: string | null
+          buffer_between_sessions?: number | null
           city?: string | null
           created_at?: string
           crp?: string | null

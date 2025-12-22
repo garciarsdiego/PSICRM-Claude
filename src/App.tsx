@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
@@ -34,21 +35,77 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/patients" element={<Patients />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/records" element={<Records />} />
-            <Route path="/financial" element={<Financial />} />
-            <Route path="/messages" element={<Messages />} />
-            <Route path="/emails" element={<Emails />} />
-            <Route path="/settings" element={<Settings />} />
-            {/* Patient Portal Routes */}
+            
+            {/* Professional Routes - Protected */}
+            <Route path="/dashboard" element={
+              <ProtectedRoute allowedRole="professional">
+                <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/patients" element={
+              <ProtectedRoute allowedRole="professional">
+                <Patients />
+              </ProtectedRoute>
+            } />
+            <Route path="/schedule" element={
+              <ProtectedRoute allowedRole="professional">
+                <Schedule />
+              </ProtectedRoute>
+            } />
+            <Route path="/records" element={
+              <ProtectedRoute allowedRole="professional">
+                <Records />
+              </ProtectedRoute>
+            } />
+            <Route path="/financial" element={
+              <ProtectedRoute allowedRole="professional">
+                <Financial />
+              </ProtectedRoute>
+            } />
+            <Route path="/messages" element={
+              <ProtectedRoute allowedRole="professional">
+                <Messages />
+              </ProtectedRoute>
+            } />
+            <Route path="/emails" element={
+              <ProtectedRoute allowedRole="professional">
+                <Emails />
+              </ProtectedRoute>
+            } />
+            <Route path="/settings" element={
+              <ProtectedRoute allowedRole="professional">
+                <Settings />
+              </ProtectedRoute>
+            } />
+            
+            {/* Patient Portal Routes - Protected */}
             <Route path="/patient/auth" element={<PatientAuth />} />
-            <Route path="/patient/dashboard" element={<PatientDashboard />} />
-            <Route path="/patient/sessions" element={<PatientSessions />} />
-            <Route path="/patient/payments" element={<PatientPayments />} />
-            <Route path="/patient/book" element={<PatientBooking />} />
-            <Route path="/patient/messages" element={<PatientMessages />} />
+            <Route path="/patient/dashboard" element={
+              <ProtectedRoute allowedRole="patient">
+                <PatientDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/patient/sessions" element={
+              <ProtectedRoute allowedRole="patient">
+                <PatientSessions />
+              </ProtectedRoute>
+            } />
+            <Route path="/patient/payments" element={
+              <ProtectedRoute allowedRole="patient">
+                <PatientPayments />
+              </ProtectedRoute>
+            } />
+            <Route path="/patient/book" element={
+              <ProtectedRoute allowedRole="patient">
+                <PatientBooking />
+              </ProtectedRoute>
+            } />
+            <Route path="/patient/messages" element={
+              <ProtectedRoute allowedRole="patient">
+                <PatientMessages />
+              </ProtectedRoute>
+            } />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimeMessages } from '@/hooks/useRealtimeMessages';
 import { Search, Send, User, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
@@ -131,6 +132,9 @@ export default function Messages() {
       queryClient.invalidateQueries({ queryKey: ['unread-counts'] });
     },
   });
+
+  // Enable realtime messages
+  useRealtimeMessages(selectedPatientId, profile?.user_id);
 
   // Scroll to bottom when messages change
   useEffect(() => {

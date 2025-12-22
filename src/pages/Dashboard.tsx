@@ -94,20 +94,29 @@ export default function Dashboard() {
 
       setTodaySessions(todayResult.data || []);
 
-      // Gerar dados de receita dos últimos 6 meses
+      // Buscar receita real dos últimos 6 meses
       const revenueByMonth: any[] = [];
       for (let i = 5; i >= 0; i--) {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
+        const mStart = startOfMonth(date);
+        const mEnd = endOfMonth(date);
         const monthName = format(date, 'MMM', { locale: ptBR });
+        
+        const { data: monthSessions } = await supabase
+          .from('sessions')
+          .select('price')
+          .eq('professional_id', user.id)
+          .eq('payment_status', 'paid')
+          .gte('scheduled_at', mStart.toISOString())
+          .lte('scheduled_at', mEnd.toISOString());
+        
+        const monthRevenue = monthSessions?.reduce((acc, s) => acc + Number(s.price), 0) || 0;
+        
         revenueByMonth.push({
           month: monthName,
-          revenue: Math.floor(Math.random() * 5000) + 2000, // TODO: Calcular real
+          revenue: monthRevenue,
         });
-      }
-      // Último mês usa o valor real
-      if (revenueByMonth.length > 0) {
-        revenueByMonth[revenueByMonth.length - 1].revenue = monthlyRevenue;
       }
       setRevenueData(revenueByMonth);
 

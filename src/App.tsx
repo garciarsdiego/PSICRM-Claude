@@ -9,11 +9,9 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Patients from "./pages/Patients";
 import Schedule from "./pages/Schedule";
-import Records from "./pages/Records";
 import Financial from "./pages/Financial";
 import Messages from "./pages/Messages";
 import Emails from "./pages/Emails";
-import EmailTemplates from "./pages/EmailTemplates";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -54,11 +52,6 @@ const App = () => (
                 <Schedule />
               </ProtectedRoute>
             } />
-            <Route path="/records" element={
-              <ProtectedRoute allowedRole="professional">
-                <Records />
-              </ProtectedRoute>
-            } />
             <Route path="/financial" element={
               <ProtectedRoute allowedRole="professional">
                 <Financial />
@@ -72,11 +65,6 @@ const App = () => (
             <Route path="/emails" element={
               <ProtectedRoute allowedRole="professional">
                 <Emails />
-              </ProtectedRoute>
-            } />
-            <Route path="/email-templates" element={
-              <ProtectedRoute allowedRole="professional">
-                <EmailTemplates />
               </ProtectedRoute>
             } />
             <Route path="/settings" element={

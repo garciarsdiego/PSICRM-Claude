@@ -167,12 +167,12 @@ serve(async (req) => {
         }
       }
 
-      // Import events from Google Calendar as blocked slots
+      // Import events from Google Calendar
       const timeMin = new Date().toISOString();
       const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
       const eventsResponse = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true`,
+        `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`,
         {
           headers: { 'Authorization': `Bearer ${accessToken}` },
         }
@@ -181,6 +181,7 @@ serve(async (req) => {
       if (eventsResponse.ok) {
         const eventsData = await eventsResponse.json();
         const events = eventsData.items || [];
+        console.log(`Found ${events.length} events in Google Calendar`);
 
         // Get existing google_event_ids from sessions
         const { data: existingSessions } = await supabase
@@ -190,10 +191,68 @@ serve(async (req) => {
 
         const sessionEventIds = new Set(existingSessions?.map(s => s.google_event_id).filter(Boolean));
 
-        // Import events that aren't our sessions as blocked slots
+        // Get existing imported events
+        const { data: existingImported } = await supabase
+          .from('google_calendar_events')
+          .select('google_event_id')
+          .eq('professional_id', user.id);
+
+        const importedEventIds = new Set(existingImported?.map(e => e.google_event_id) || []);
+
+        // Import events that aren't our sessions
+        for (const event of events) {
+          if (sessionEventIds.has(event.id)) continue; // Skip our own sessions
+          if (!event.start) continue;
+
+          const isAllDay = !event.start.dateTime;
+          const startTime = isAllDay 
+            ? new Date(event.start.date + 'T00:00:00') 
+            : new Date(event.start.dateTime);
+          const endTime = isAllDay 
+            ? new Date(event.end.date + 'T23:59:59') 
+            : new Date(event.end?.dateTime || startTime);
+
+          // Upsert the event
+          const eventData = {
+            professional_id: user.id,
+            google_event_id: event.id,
+            title: event.summary || 'Evento sem título',
+            description: event.description || null,
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            is_all_day: isAllDay,
+          };
+
+          const { error: upsertError } = await supabase
+            .from('google_calendar_events')
+            .upsert(eventData, { 
+              onConflict: 'professional_id,google_event_id' 
+            });
+
+          if (!upsertError && !importedEventIds.has(event.id)) {
+            imported++;
+          }
+        }
+
+        // Remove events that no longer exist in Google Calendar
+        const currentEventIds = new Set(events.map((e: any) => e.id));
+        const eventsToDelete = (existingImported || [])
+          .filter(e => !currentEventIds.has(e.google_event_id))
+          .map(e => e.google_event_id);
+
+        if (eventsToDelete.length > 0) {
+          await supabase
+            .from('google_calendar_events')
+            .delete()
+            .eq('professional_id', user.id)
+            .in('google_event_id', eventsToDelete);
+          console.log(`Removed ${eventsToDelete.length} deleted events`);
+        }
+
+        // Also create blocked slots for busy times (for patient booking)
         for (const event of events) {
           if (sessionEventIds.has(event.id)) continue;
-          if (!event.start?.dateTime) continue; // Skip all-day events for now
+          if (!event.start?.dateTime) continue; // Skip all-day events for blocked slots
 
           const eventDate = new Date(event.start.dateTime);
           const eventEndDate = new Date(event.end?.dateTime || eventDate);
@@ -217,7 +276,6 @@ serve(async (req) => {
                 end_time: eventEndDate.toTimeString().slice(0, 5),
                 reason: event.summary || 'Google Calendar',
               });
-            imported++;
           }
         }
       }

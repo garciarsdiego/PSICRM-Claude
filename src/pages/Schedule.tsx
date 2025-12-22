@@ -52,6 +52,8 @@ type Session = Tables<'sessions'> & {
 
 type Patient = Tables<'patients'>;
 
+type GoogleCalendarEvent = Tables<'google_calendar_events'>;
+
 const sessionStatusColors: Record<string, string> = {
   scheduled: 'bg-primary/20 text-primary border-primary',
   completed: 'bg-success/20 text-success border-success',
@@ -153,6 +155,21 @@ export default function Schedule() {
       return data as Session[];
     },
     enabled: !!profile?.id,
+  });
+
+  // Fetch Google Calendar events
+  const { data: googleEvents = [] } = useQuery({
+    queryKey: ['google-calendar-events', profile?.id],
+    queryFn: async () => {
+      if (!profile?.id) return [];
+      const { data, error } = await supabase
+        .from('google_calendar_events')
+        .select('*')
+        .eq('professional_id', profile.user_id)
+        .order('start_time', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
   });
 
   // Fetch patients for the dropdown
@@ -425,6 +442,7 @@ export default function Schedule() {
                   <DayView
                     selectedDate={selectedDate}
                     sessions={sessions}
+                    googleEvents={googleEvents}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
                   />
@@ -433,6 +451,7 @@ export default function Schedule() {
                   <WeekView
                     currentDate={currentDate}
                     sessions={sessions}
+                    googleEvents={googleEvents}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
                   />
@@ -441,6 +460,7 @@ export default function Schedule() {
                   <MonthView
                     currentDate={currentDate}
                     sessions={sessions}
+                    googleEvents={googleEvents}
                     selectedDate={selectedDate}
                     onDayClick={(date) => {
                       setSelectedDate(date);

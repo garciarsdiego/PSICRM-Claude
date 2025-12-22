@@ -210,10 +210,13 @@ export default function PatientBooking() {
     if (!dayAvailability) return [];
     
     const duration = professionalProfile?.session_duration || 50;
+    // Slot interval = session duration + buffer between sessions
+    const slotInterval = duration + bufferBetweenSessions;
+    
     return generateTimeSlots(
       dayAvailability.start_time.slice(0, 5),
       dayAvailability.end_time.slice(0, 5),
-      duration
+      slotInterval
     );
   };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,14 +7,25 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Heart, Loader2, User, ArrowLeft } from 'lucide-react';
+import { Heart, Loader2, User, ArrowLeft, CheckCircle } from 'lucide-react';
 import { z } from 'zod';
+import { supabase } from '@/integrations/supabase/client';
 
 const emailSchema = z.string().email('Email inválido');
 const passwordSchema = z.string().min(6, 'Senha deve ter no mínimo 6 caracteres');
 
+interface InviteData {
+  id: string;
+  professional_id: string;
+  patient_id: string | null;
+  email: string | null;
+  professional_name?: string;
+}
+
 export default function PatientAuth() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const inviteToken = searchParams.get('invite');
   const { user, role, signIn, signUp } = useAuth();
   const { toast } = useToast();
   
@@ -25,6 +36,58 @@ export default function PatientAuth() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
+  
+  const [inviteData, setInviteData] = useState<InviteData | null>(null);
+  const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
+  const [inviteError, setInviteError] = useState('');
+
+  // Load invite data if token exists
+  useEffect(() => {
+    const loadInvite = async () => {
+      if (!inviteToken) return;
+      
+      setInviteLoading(true);
+      try {
+        const { data: invite, error } = await supabase
+          .from('patient_invites')
+          .select('id, professional_id, patient_id, email')
+          .eq('token', inviteToken)
+          .is('used_at', null)
+          .gt('expires_at', new Date().toISOString())
+          .maybeSingle();
+
+        if (error) throw error;
+        if (!invite) {
+          setInviteError('Convite inválido ou expirado');
+          return;
+        }
+
+        // Get professional name
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('user_id', invite.professional_id)
+          .maybeSingle();
+
+        setInviteData({
+          ...invite,
+          professional_name: profile?.full_name || 'Profissional',
+        });
+
+        // Pre-fill email if available
+        if (invite.email) {
+          setSignupEmail(invite.email);
+        }
+      } catch (error) {
+        console.error('Error loading invite:', error);
+        setInviteError('Erro ao carregar convite');
+      } finally {
+        setInviteLoading(false);
+      }
+    };
+
+    loadInvite();
+  }, [inviteToken]);
 
   useEffect(() => {
     if (user && role === 'patient') {
@@ -103,9 +166,9 @@ export default function PatientAuth() {
 
     setIsLoading(true);
     const { error } = await signUp(signupEmail, signupPassword, signupName, 'patient');
-    setIsLoading(false);
-
+    
     if (error) {
+      setIsLoading(false);
       if (error.message.includes('already registered')) {
         toast({
           variant: 'destructive',
@@ -119,13 +182,59 @@ export default function PatientAuth() {
           description: error.message,
         });
       }
+      return;
+    }
+
+    // If we have an invite, link the patient after signup
+    if (inviteData) {
+      try {
+        // Wait a bit for the user to be created
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        
+        if (newUser && inviteData.patient_id) {
+          // Update patient with user_id
+          await supabase
+            .from('patients')
+            .update({ user_id: newUser.id })
+            .eq('id', inviteData.patient_id);
+        }
+
+        // Mark invite as used
+        await supabase
+          .from('patient_invites')
+          .update({ used_at: new Date().toISOString() })
+          .eq('id', inviteData.id);
+
+        toast({
+          title: 'Conta criada e vinculada!',
+          description: `Você está vinculado ao profissional ${inviteData.professional_name}.`,
+        });
+      } catch (linkError) {
+        console.error('Error linking patient:', linkError);
+        toast({
+          title: 'Conta criada!',
+          description: 'Houve um problema ao vincular. Entre em contato com seu profissional.',
+        });
+      }
     } else {
       toast({
         title: 'Conta criada com sucesso!',
         description: 'Você será redirecionado para o portal.',
       });
     }
+
+    setIsLoading(false);
   };
+
+  if (inviteLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-primary/5 to-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center p-4">
@@ -148,15 +257,40 @@ export default function PatientAuth() {
           </p>
         </div>
 
+        {inviteError ? (
+          <Card className="border-destructive">
+            <CardContent className="pt-6 text-center">
+              <p className="text-destructive mb-4">{inviteError}</p>
+              <Button onClick={() => navigate('/patient/auth')} variant="outline">
+                Continuar sem convite
+              </Button>
+            </CardContent>
+          </Card>
+        ) : inviteData ? (
+          <Card className="border-primary mb-4">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3 text-primary">
+                <CheckCircle className="h-5 w-5" />
+                <div>
+                  <p className="font-medium">Convite de {inviteData.professional_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Crie sua conta para acessar o portal
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card className="border-border shadow-lg">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-2xl text-center">Área do Paciente</CardTitle>
             <CardDescription className="text-center">
-              Entre ou crie sua conta de paciente
+              {inviteData ? 'Crie sua conta para continuar' : 'Entre ou crie sua conta de paciente'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs defaultValue={inviteData ? 'signup' : 'login'} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Entrar</TabsTrigger>
                 <TabsTrigger value="signup">Criar conta</TabsTrigger>

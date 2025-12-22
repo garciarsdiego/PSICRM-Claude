@@ -36,7 +36,27 @@ import {
   Settings2,
   Video,
   Loader2,
+  Pencil,
+  Trash2,
+  MoreHorizontal,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
 import { AvailabilitySettings } from '@/components/schedule/AvailabilitySettings';
@@ -363,6 +383,28 @@ export default function Schedule() {
     },
   });
 
+  // Delete session mutation
+  const deleteSession = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      setDeleteSessionId(null);
+      toast({ title: 'Sessão excluída!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao excluir sessão', variant: 'destructive' });
+    },
+  });
+
+  // Session to delete state
+  const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+
   const handleSessionClick = (session: Session) => {
     setSelectedSession(session);
     setIsDetailModalOpen(true);
@@ -664,6 +706,27 @@ export default function Schedule() {
                             <SelectItem value="no_show">Não compareceu</SelectItem>
                           </SelectContent>
                         </Select>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleSessionClick(session)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => setDeleteSessionId(session.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </Card>
@@ -699,12 +762,51 @@ export default function Schedule() {
                           </div>
                         </div>
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={sessionStatusColors[session.status || 'scheduled']}
-                      >
-                        {sessionStatusLabels[session.status || 'scheduled']}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={sessionStatusColors[session.status || 'scheduled']}
+                        >
+                          {sessionStatusLabels[session.status || 'scheduled']}
+                        </Badge>
+                        <Select
+                          value={session.status || 'scheduled'}
+                          onValueChange={(value) =>
+                            updateSessionStatus.mutate({ id: session.id, status: value })
+                          }
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="scheduled">Agendada</SelectItem>
+                            <SelectItem value="completed">Realizada</SelectItem>
+                            <SelectItem value="cancelled">Cancelada</SelectItem>
+                            <SelectItem value="no_show">Não compareceu</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleSessionClick(session)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => setDeleteSessionId(session.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -734,6 +836,31 @@ export default function Schedule() {
           onUpdate={handleUpdateSession}
           onStatusChange={handleStatusChange}
         />
+
+        {/* Delete Session Confirmation */}
+        <AlertDialog open={!!deleteSessionId} onOpenChange={(open) => !open && setDeleteSessionId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir esta sessão? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteSessionId && deleteSession.mutate(deleteSessionId)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteSession.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Excluir'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

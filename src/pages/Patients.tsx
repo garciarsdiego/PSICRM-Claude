@@ -12,7 +12,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Table,
@@ -38,6 +37,9 @@ import {
   Link2,
   Unlink,
   Loader2,
+  Copy,
+  Check,
+  Send,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -50,10 +52,13 @@ export default function Patients() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isViewMode, setIsViewMode] = useState(false);
   const [linkEmail, setLinkEmail] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [inviteLink, setInviteLink] = useState('');
+  const [copied, setCopied] = useState(false);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -197,6 +202,41 @@ export default function Patients() {
       toast({ title: 'Erro ao remover vínculo', variant: 'destructive' });
     },
   });
+
+  // Generate invite link
+  const generateInvite = useMutation({
+    mutationFn: async (patient: Patient) => {
+      if (!profile?.user_id) throw new Error('Não autenticado');
+
+      const { data, error } = await supabase
+        .from('patient_invites')
+        .insert({
+          professional_id: profile.user_id,
+          patient_id: patient.id,
+          email: patient.email || null,
+        })
+        .select('token')
+        .single();
+
+      if (error) throw error;
+      return data.token;
+    },
+    onSuccess: (token) => {
+      const link = `${window.location.origin}/patient/auth?invite=${token}`;
+      setInviteLink(link);
+      setIsInviteDialogOpen(true);
+    },
+    onError: () => {
+      toast({ title: 'Erro ao gerar convite', variant: 'destructive' });
+    },
+  });
+
+  const copyInviteLink = () => {
+    navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast({ title: 'Link copiado!' });
+  };
 
   const openDialog = (patient?: Patient, viewMode = false) => {
     if (patient) {
@@ -424,14 +464,33 @@ export default function Patients() {
                             </Button>
                           </div>
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openLinkDialog(patient)}
-                          >
-                            <Link2 className="h-4 w-4 mr-1" />
-                            Vincular
-                          </Button>
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openLinkDialog(patient)}
+                              title="Vincular a conta existente"
+                            >
+                              <Link2 className="h-4 w-4 mr-1" />
+                              Vincular
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedPatient(patient);
+                                generateInvite.mutate(patient);
+                              }}
+                              disabled={generateInvite.isPending}
+                              title="Gerar link de convite"
+                            >
+                              {generateInvite.isPending ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
@@ -714,6 +773,51 @@ export default function Patients() {
                   </>
                 )}
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Invite Link Dialog */}
+        <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Link de Convite Gerado</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Envie este link para <strong>{selectedPatient?.full_name}</strong>. 
+                O paciente poderá criar sua conta já vinculada ao seu consultório.
+                O link expira em 7 dias.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  value={inviteLink}
+                  readOnly
+                  className="text-xs"
+                />
+                <Button onClick={copyInviteLink} variant="outline">
+                  {copied ? (
+                    <Check className="h-4 w-4 text-success" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+              {selectedPatient?.email && (
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onClick={() => {
+                    window.open(
+                      `mailto:${selectedPatient.email}?subject=Convite%20para%20Portal%20do%20Paciente&body=Olá%20${encodeURIComponent(selectedPatient.full_name)},%0A%0AVocê%20foi%20convidado%20para%20acessar%20o%20Portal%20do%20Paciente.%20Clique%20no%20link%20abaixo%20para%20criar%20sua%20conta:%0A%0A${encodeURIComponent(inviteLink)}%0A%0AEste%20link%20expira%20em%207%20dias.`,
+                      '_blank'
+                    );
+                  }}
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Enviar por E-mail
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>

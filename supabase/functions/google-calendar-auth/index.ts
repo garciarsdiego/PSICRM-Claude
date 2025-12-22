@@ -26,13 +26,22 @@ serve(async (req) => {
       throw new Error('Missing authorization header');
     }
 
-    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
-    
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+
+    // Validate the caller session with anon key + passed Authorization header
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
     if (authError || !user) {
+      console.error('Auth error:', authError?.message);
       throw new Error('Invalid token');
     }
+
+    // Service role client for data writes
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log('User ID:', user.id);
 

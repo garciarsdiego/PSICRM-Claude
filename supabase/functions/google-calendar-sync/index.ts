@@ -212,6 +212,19 @@ serve(async (req) => {
             ? new Date(event.end.date + 'T23:59:59') 
             : new Date(event.end?.dateTime || startTime);
 
+          // Determine event type based on title keywords
+          const title = (event.summary || '').toLowerCase();
+          let eventType = 'default';
+          if (title.includes('reunião') || title.includes('meeting') || title.includes('call')) {
+            eventType = 'meeting';
+          } else if (title.includes('pessoal') || title.includes('personal') || title.includes('particular')) {
+            eventType = 'personal';
+          } else if (title.includes('foco') || title.includes('focus') || title.includes('trabalho') || title.includes('work')) {
+            eventType = 'focus';
+          } else if (title.includes('viagem') || title.includes('travel') || title.includes('fora')) {
+            eventType = 'travel';
+          }
+
           // Upsert the event
           const eventData = {
             professional_id: user.id,
@@ -221,6 +234,8 @@ serve(async (req) => {
             start_time: startTime.toISOString(),
             end_time: endTime.toISOString(),
             is_all_day: isAllDay,
+            event_type: eventType,
+            color_id: event.colorId || null,
           };
 
           const { error: upsertError } = await supabase

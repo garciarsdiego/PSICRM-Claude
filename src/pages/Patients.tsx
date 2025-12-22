@@ -60,8 +60,10 @@ import {
   Download,
   Paperclip,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { PatientAttachments } from '@/components/patient/PatientAttachments';
+import { PatientRecords } from '@/components/patient/PatientRecords';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -102,7 +104,7 @@ export default function Patients() {
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(true);
   const [attachmentsPatient, setAttachmentsPatient] = useState<Patient | null>(null);
-  
+  const [recordsPatient, setRecordsPatient] = useState<Patient | null>(null);
   // Bulk selection and actions
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
@@ -1110,6 +1112,22 @@ export default function Patients() {
                                 <Paperclip className="h-4 w-4 mr-2" />
                                 Anexos
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setRecordsPatient(patient)}
+                              >
+                                <FileText className="h-4 w-4 mr-2" />
+                                Prontuários
+                              </DropdownMenuItem>
+                              {patient.user_id && (
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    window.location.href = `/messages?patient=${patient.id}`;
+                                  }}
+                                >
+                                  <MessageSquare className="h-4 w-4 mr-2" />
+                                  Mensagens
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 onClick={() => setDeletePatientId(patient.id)}
@@ -1751,6 +1769,22 @@ export default function Patients() {
           isOpen={!!attachmentsPatient}
           onClose={() => setAttachmentsPatient(null)}
         />
+      )}
+
+      {/* Patient Records Dialog */}
+      {recordsPatient && profile?.user_id && (
+        <Dialog open={!!recordsPatient} onOpenChange={(open) => !open && setRecordsPatient(null)}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Prontuários - {recordsPatient.full_name}</DialogTitle>
+            </DialogHeader>
+            <PatientRecords
+              patientId={recordsPatient.id}
+              patientName={recordsPatient.full_name}
+              professionalId={profile.user_id}
+            />
+          </DialogContent>
+        </Dialog>
       )}
     </AppLayout>
   );

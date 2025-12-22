@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, Clock, User } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'>;
@@ -71,19 +72,19 @@ export default function PatientSessions() {
 
   const SessionCard = ({ session }: { session: Session }) => (
     <Card>
-      <CardContent className="flex items-center justify-between py-4">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Calendar className="h-6 w-6 text-primary" />
+      <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-full bg-primary/10 flex-shrink-0">
+            <Calendar className="h-5 w-5 md:h-6 md:w-6 text-primary" />
           </div>
-          <div>
-            <p className="font-medium">
-              {format(new Date(session.scheduled_at), "EEEE, dd 'de' MMMM 'de' yyyy", {
+          <div className="min-w-0">
+            <p className="font-medium text-sm md:text-base truncate">
+              {format(new Date(session.scheduled_at), "EEEE, dd 'de' MMMM", {
                 locale: ptBR,
               })}
             </p>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
+            <div className="flex flex-wrap items-center gap-1 md:gap-2 text-xs md:text-sm text-muted-foreground">
+              <Clock className="h-3 w-3 md:h-4 md:w-4" />
               {format(new Date(session.scheduled_at), 'HH:mm', { locale: ptBR })}
               <span>•</span>
               {session.duration} min
@@ -92,20 +93,21 @@ export default function PatientSessions() {
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge
             variant="outline"
-            className={sessionStatusColors[session.status || 'scheduled']}
+            className={cn("text-xs", sessionStatusColors[session.status || 'scheduled'])}
           >
             {sessionStatusLabels[session.status || 'scheduled']}
           </Badge>
           <Badge
             variant="outline"
-            className={
+            className={cn(
+              "text-xs",
               session.payment_status === 'paid'
                 ? 'bg-success/20 text-success'
                 : 'bg-warning/20 text-warning'
-            }
+            )}
           >
             {session.payment_status === 'paid' ? 'Pago' : 'Pendente'}
           </Badge>
@@ -116,20 +118,20 @@ export default function PatientSessions() {
 
   return (
     <PatientLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Minhas Sessões</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Minhas Sessões</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Visualize suas sessões agendadas e anteriores
           </p>
         </div>
 
         <Tabs defaultValue="upcoming" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="upcoming">
+          <TabsList className="w-full grid grid-cols-2 md:w-auto md:flex">
+            <TabsTrigger value="upcoming" className="text-xs md:text-sm">
               Próximas ({upcomingSessions.length})
             </TabsTrigger>
-            <TabsTrigger value="past">Anteriores ({pastSessions.length})</TabsTrigger>
+            <TabsTrigger value="past" className="text-xs md:text-sm">Anteriores ({pastSessions.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-4">

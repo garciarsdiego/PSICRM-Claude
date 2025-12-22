@@ -79,13 +79,13 @@ export default function PatientDashboard() {
 
   return (
     <PatientLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Welcome */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
             Olá, {profile?.full_name?.split(' ')[0]}! 👋
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm md:text-base text-muted-foreground">
             Bem-vindo ao seu portal de atendimento
           </p>
         </div>
@@ -93,7 +93,7 @@ export default function PatientDashboard() {
         {!patientRecord && (
           <Card className="border-warning bg-warning/10">
             <CardContent className="py-4">
-              <p className="text-warning-foreground">
+              <p className="text-sm md:text-base text-warning-foreground">
                 Seu cadastro ainda não foi vinculado a um profissional. Entre em contato
                 com seu psicólogo para que ele vincule sua conta.
               </p>
@@ -102,7 +102,7 @@ export default function PatientDashboard() {
         )}
 
         {/* Quick Stats */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Próximas Sessões</CardTitle>
@@ -159,7 +159,7 @@ export default function PatientDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:gap-4 grid-cols-1 sm:grid-cols-3">
           <Link to="/patient/book">
             <Card className="hover:bg-accent/50 transition-colors cursor-pointer h-full">
               <CardContent className="flex items-center gap-4 py-6">

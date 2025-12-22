@@ -146,11 +146,11 @@ export default function PatientMessages() {
 
   return (
     <PatientLayout>
-      <div className="h-[calc(100vh-8rem)]">
+      <div className="h-[calc(100vh-12rem)] md:h-[calc(100vh-8rem)]">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Mensagens</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Mensagens</h1>
+            <p className="text-sm md:text-base text-muted-foreground">
               Converse com seu profissional de saúde
             </p>
           </div>

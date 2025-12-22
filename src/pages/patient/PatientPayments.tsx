@@ -94,16 +94,16 @@ export default function PatientPayments() {
 
   return (
     <PatientLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Pagamentos</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground">Pagamentos</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Gerencie seus pagamentos e histórico financeiro
           </p>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 md:gap-4 grid-cols-2">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Pendente</CardTitle>
@@ -151,38 +151,38 @@ export default function PatientPayments() {
               {pendingSessions.map((session) => (
                 <div
                   key={session.id}
-                  className="flex items-center justify-between p-4 rounded-lg border"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 md:p-4 rounded-lg border"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-warning/10">
-                      <Calendar className="h-6 w-6 text-warning" />
+                  <div className="flex items-center gap-3 md:gap-4">
+                    <div className="flex h-10 w-10 md:h-12 md:w-12 items-center justify-center rounded-full bg-warning/10 flex-shrink-0">
+                      <Calendar className="h-5 w-5 md:h-6 md:w-6 text-warning" />
                     </div>
                     <div>
-                      <p className="font-medium">
+                      <p className="font-medium text-sm md:text-base">
                         {format(new Date(session.scheduled_at), "dd 'de' MMMM 'de' yyyy", {
                           locale: ptBR,
                         })}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs md:text-sm text-muted-foreground">
                         Sessão às {format(new Date(session.scheduled_at), 'HH:mm')}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <p className="font-bold text-lg">R$ {Number(session.price).toFixed(2)}</p>
+                  <div className="flex items-center gap-2 sm:gap-4 justify-between sm:justify-end">
+                    <div className="text-left sm:text-right">
+                      <p className="font-bold text-base md:text-lg">R$ {Number(session.price).toFixed(2)}</p>
                       <Badge
                         variant="outline"
                         className={
                           session.payment_status === 'overdue'
-                            ? 'bg-destructive/20 text-destructive'
-                            : 'bg-warning/20 text-warning'
+                            ? 'bg-destructive/20 text-destructive text-xs'
+                            : 'bg-warning/20 text-warning text-xs'
                         }
                       >
                         {session.payment_status === 'overdue' ? 'Atrasado' : 'Pendente'}
                       </Badge>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1 sm:gap-2">
                       <Button
                         size="sm"
                         onClick={() => simulatePayment.mutate(session.id)}

@@ -51,7 +51,28 @@ import {
   Send,
   Calendar,
   Clock,
+  MoreHorizontal,
+  Trash2,
+  UserX,
+  UserCheck,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Patient = Tables<'patients'>;
@@ -70,6 +91,8 @@ export default function Patients() {
   const [isSaving, setIsSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [copied, setCopied] = useState(false);
+  const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
+  const [showInactive, setShowInactive] = useState(true);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -366,6 +389,44 @@ export default function Patients() {
     },
   });
 
+  // Delete patient mutation
+  const deletePatient = useMutation({
+    mutationFn: async (patientId: string) => {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .eq('id', patientId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setDeletePatientId(null);
+      toast({ title: 'Paciente excluído com sucesso!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao excluir paciente. Verifique se não há sessões vinculadas.', variant: 'destructive' });
+    },
+  });
+
+  // Toggle patient active status
+  const togglePatientStatus = useMutation({
+    mutationFn: async ({ patientId, isActive }: { patientId: string; isActive: boolean }) => {
+      const { error } = await supabase
+        .from('patients')
+        .update({ is_active: isActive })
+        .eq('id', patientId);
+      if (error) throw error;
+      return isActive;
+    },
+    onSuccess: (isActive) => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      toast({ title: isActive ? 'Paciente reativado!' : 'Paciente desativado!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao alterar status do paciente', variant: 'destructive' });
+    },
+  });
+
   const copyInviteLink = () => {
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
@@ -445,9 +506,10 @@ export default function Patients() {
 
   const filteredPatients = patients.filter(
     (p) =>
-      p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.phone?.includes(searchTerm)
+      (showInactive || p.is_active) &&
+      (p.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.phone?.includes(searchTerm))
   );
 
   return (
@@ -466,15 +528,27 @@ export default function Patients() {
           </Button>
         </div>
 
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nome, e-mail ou telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+        {/* Search and Filters */}
+        <div className="flex gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nome, e-mail ou telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-inactive"
+              checked={showInactive}
+              onCheckedChange={setShowInactive}
+            />
+            <Label htmlFor="show-inactive" className="text-sm whitespace-nowrap">
+              Mostrar inativos
+            </Label>
+          </div>
         </div>
 
         {/* Stats */}
@@ -632,11 +706,12 @@ export default function Patients() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => openDialog(patient, true)}
+                            title="Ver detalhes"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -644,9 +719,42 @@ export default function Patients() {
                             size="sm"
                             variant="ghost"
                             onClick={() => openDialog(patient, false)}
+                            title="Editar"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="ghost">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {patient.is_active ? (
+                                <DropdownMenuItem
+                                  onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: false })}
+                                >
+                                  <UserX className="h-4 w-4 mr-2" />
+                                  Desativar
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: true })}
+                                >
+                                  <UserCheck className="h-4 w-4 mr-2" />
+                                  Reativar
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => setDeletePatientId(patient.id)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1065,6 +1173,32 @@ export default function Patients() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Patient Confirmation */}
+        <AlertDialog open={!!deletePatientId} onOpenChange={(open) => !open && setDeletePatientId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir este paciente? Esta ação não pode ser desfeita.
+                Se houver sessões vinculadas, a exclusão falhará.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deletePatientId && deletePatient.mutate(deletePatientId)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deletePatient.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Excluir'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

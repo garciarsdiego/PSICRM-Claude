@@ -11,7 +11,7 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Calendar } from 'lucide-react';
+import { Calendar, Users, Briefcase, Plane, Clock } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
@@ -33,6 +33,23 @@ const sessionStatusColors: Record<string, string> = {
   completed: 'bg-success',
   cancelled: 'bg-muted-foreground',
   no_show: 'bg-destructive',
+};
+
+// Colors for Google Calendar event types
+const eventTypeColors: Record<string, string> = {
+  default: 'bg-accent',
+  meeting: 'bg-chart-5',
+  personal: 'bg-chart-3',
+  focus: 'bg-chart-2',
+  travel: 'bg-chart-4',
+};
+
+const eventTypeIcons: Record<string, typeof Calendar> = {
+  default: Calendar,
+  meeting: Users,
+  personal: Clock,
+  focus: Briefcase,
+  travel: Plane,
 };
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -125,16 +142,25 @@ export function MonthView({ currentDate, sessions, googleEvents = [], onDayClick
                 ))}
                 
                 {/* Google Calendar Events */}
-                {dayGoogleEvents.slice(0, daySessions.length >= 2 ? 0 : 2 - daySessions.length).map((event) => (
-                  <div
-                    key={event.id}
-                    className="text-xs px-1 py-0.5 rounded truncate bg-accent text-accent-foreground flex items-center gap-1"
-                    title={`${event.title} - ${format(new Date(event.start_time), 'HH:mm')}`}
-                  >
-                    <Calendar className="h-2.5 w-2.5 flex-shrink-0" />
-                    <span className="truncate">{event.title}</span>
-                  </div>
-                ))}
+                {dayGoogleEvents.slice(0, daySessions.length >= 2 ? 0 : 2 - daySessions.length).map((event) => {
+                  const eventType = (event.event_type as string) || 'default';
+                  const bgColor = eventTypeColors[eventType] || eventTypeColors.default;
+                  const IconComponent = eventTypeIcons[eventType] || Calendar;
+                  
+                  return (
+                    <div
+                      key={event.id}
+                      className={cn(
+                        'text-xs px-1 py-0.5 rounded truncate text-card flex items-center gap-1',
+                        bgColor
+                      )}
+                      title={`${event.title} - ${format(new Date(event.start_time), 'HH:mm')}`}
+                    >
+                      <IconComponent className="h-2.5 w-2.5 flex-shrink-0" />
+                      <span className="truncate">{event.title}</span>
+                    </div>
+                  );
+                })}
                 
                 {totalItems > 2 && (
                   <div className="text-xs text-muted-foreground text-center">

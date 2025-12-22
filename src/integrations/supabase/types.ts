@@ -118,9 +118,11 @@ export type Database = {
       }
       google_calendar_events: {
         Row: {
+          color_id: string | null
           created_at: string
           description: string | null
           end_time: string
+          event_type: string | null
           google_event_id: string
           id: string
           is_all_day: boolean | null
@@ -130,9 +132,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          color_id?: string | null
           created_at?: string
           description?: string | null
           end_time: string
+          event_type?: string | null
           google_event_id: string
           id?: string
           is_all_day?: boolean | null
@@ -142,9 +146,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          color_id?: string | null
           created_at?: string
           description?: string | null
           end_time?: string
+          event_type?: string | null
           google_event_id?: string
           id?: string
           is_all_day?: boolean | null

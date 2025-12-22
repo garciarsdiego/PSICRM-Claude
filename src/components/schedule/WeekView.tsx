@@ -1,7 +1,7 @@
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Calendar } from 'lucide-react';
+import { Calendar, Users, Briefcase, Plane, Clock } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
@@ -23,6 +23,15 @@ const sessionStatusColors: Record<string, string> = {
   completed: 'bg-success/20 text-success border-l-success',
   cancelled: 'bg-muted text-muted-foreground border-l-muted-foreground',
   no_show: 'bg-destructive/20 text-destructive border-l-destructive',
+};
+
+// Colors for Google Calendar event types
+const eventTypeStyles: Record<string, { bg: string; border: string; icon: typeof Calendar }> = {
+  default: { bg: 'bg-accent/50', border: 'border-l-accent', icon: Calendar },
+  meeting: { bg: 'bg-chart-5/20', border: 'border-l-chart-5', icon: Users },
+  personal: { bg: 'bg-chart-3/20', border: 'border-l-chart-3', icon: Clock },
+  focus: { bg: 'bg-chart-2/20', border: 'border-l-chart-2', icon: Briefcase },
+  travel: { bg: 'bg-chart-4/20', border: 'border-l-chart-4', icon: Plane },
 };
 
 // Hours from 08:00 to 22:00
@@ -64,6 +73,11 @@ export function WeekView({ currentDate, sessions, googleEvents = [], onSessionCl
       newDate.setHours(hour, 0, 0, 0);
       onDropSession(sessionId, newDate);
     }
+  };
+
+  const getEventStyle = (event: GoogleCalendarEvent) => {
+    const eventType = (event.event_type as string) || 'default';
+    return eventTypeStyles[eventType] || eventTypeStyles.default;
   };
 
   return (
@@ -145,22 +159,31 @@ export function WeekView({ currentDate, sessions, googleEvents = [], onSessionCl
                     ))}
                     
                     {/* Google Calendar Events */}
-                    {hourGoogleEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="p-1.5 rounded text-xs border-l-4 bg-accent/50 text-accent-foreground border-l-accent mb-1"
-                      >
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-2.5 w-2.5 opacity-75" />
-                          <span className="font-medium truncate text-[11px]">
-                            {event.title}
-                          </span>
+                    {hourGoogleEvents.map((event) => {
+                      const style = getEventStyle(event);
+                      const IconComponent = style.icon;
+                      
+                      return (
+                        <div
+                          key={event.id}
+                          className={cn(
+                            'p-1.5 rounded text-xs border-l-4 mb-1 text-foreground',
+                            style.bg,
+                            style.border
+                          )}
+                        >
+                          <div className="flex items-center gap-1">
+                            <IconComponent className="h-2.5 w-2.5 opacity-75 flex-shrink-0" />
+                            <span className="font-medium truncate text-[11px]">
+                              {event.title}
+                            </span>
+                          </div>
+                          <div className="text-[10px] opacity-75">
+                            {format(new Date(event.start_time), 'HH:mm')}
+                          </div>
                         </div>
-                        <div className="text-[10px] opacity-75">
-                          {format(new Date(event.start_time), 'HH:mm')}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 );
               })}

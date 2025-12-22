@@ -2,6 +2,8 @@ import { format, addMonths, subMonths, addDays, subDays, addWeeks, subWeeks } fr
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import {
   Popover,
   PopoverContent,
@@ -21,6 +23,8 @@ interface CalendarHeaderProps {
   onDateChange: (date: Date) => void;
   viewType: CalendarViewType;
   onViewTypeChange: (viewType: CalendarViewType) => void;
+  showGoogleEvents?: boolean;
+  onShowGoogleEventsChange?: (show: boolean) => void;
 }
 
 export function CalendarHeader({
@@ -28,6 +32,8 @@ export function CalendarHeader({
   onDateChange,
   viewType,
   onViewTypeChange,
+  showGoogleEvents = true,
+  onShowGoogleEventsChange,
 }: CalendarHeaderProps) {
   const handlePrevious = () => {
     if (viewType === 'day') {
@@ -61,59 +67,76 @@ export function CalendarHeader({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="icon" onClick={handlePrevious}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={handlePrevious}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="min-w-[200px] justify-start">
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {getTitle()}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={currentDate}
-              onSelect={(date) => date && onDateChange(date)}
-              initialFocus
-              className={cn("p-3 pointer-events-auto")}
-              locale={ptBR}
-            />
-          </PopoverContent>
-        </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="min-w-[200px] justify-start">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {getTitle()}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={currentDate}
+                onSelect={(date) => date && onDateChange(date)}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+                locale={ptBR}
+              />
+            </PopoverContent>
+          </Popover>
 
-        <Button variant="outline" size="icon" onClick={handleNext}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+          <Button variant="outline" size="icon" onClick={handleNext}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
 
-        <Button variant="outline" onClick={handleToday}>
-          Hoje
-        </Button>
+          <Button variant="outline" onClick={handleToday}>
+            Hoje
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {onShowGoogleEventsChange && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-google-events"
+                checked={showGoogleEvents}
+                onCheckedChange={onShowGoogleEventsChange}
+              />
+              <Label htmlFor="show-google-events" className="text-sm text-muted-foreground cursor-pointer">
+                Mostrar Google Calendar
+              </Label>
+            </div>
+          )}
+
+          <ToggleGroup 
+            type="single" 
+            value={viewType} 
+            onValueChange={(value) => value && onViewTypeChange(value as CalendarViewType)}
+            className="border rounded-lg"
+          >
+            <ToggleGroupItem value="day" aria-label="Visualização do dia" className="px-3">
+              <CalendarDays className="h-4 w-4 mr-2" />
+              Dia
+            </ToggleGroupItem>
+            <ToggleGroupItem value="week" aria-label="Visualização da semana" className="px-3">
+              <CalendarRange className="h-4 w-4 mr-2" />
+              Semana
+            </ToggleGroupItem>
+            <ToggleGroupItem value="month" aria-label="Visualização do mês" className="px-3">
+              <LayoutGrid className="h-4 w-4 mr-2" />
+              Mês
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </div>
-
-      <ToggleGroup 
-        type="single" 
-        value={viewType} 
-        onValueChange={(value) => value && onViewTypeChange(value as CalendarViewType)}
-        className="border rounded-lg"
-      >
-        <ToggleGroupItem value="day" aria-label="Visualização do dia" className="px-3">
-          <CalendarDays className="h-4 w-4 mr-2" />
-          Dia
-        </ToggleGroupItem>
-        <ToggleGroupItem value="week" aria-label="Visualização da semana" className="px-3">
-          <CalendarRange className="h-4 w-4 mr-2" />
-          Semana
-        </ToggleGroupItem>
-        <ToggleGroupItem value="month" aria-label="Visualização do mês" className="px-3">
-          <LayoutGrid className="h-4 w-4 mr-2" />
-          Mês
-        </ToggleGroupItem>
-      </ToggleGroup>
     </div>
   );
 }

@@ -78,6 +78,7 @@ export default function Schedule() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [showGoogleEvents, setShowGoogleEvents] = useState(true);
   const [newSession, setNewSession] = useState({
     patient_id: '',
     scheduled_at: '',
@@ -435,6 +436,8 @@ export default function Schedule() {
                   }}
                   viewType={viewType}
                   onViewTypeChange={setViewType}
+                  showGoogleEvents={showGoogleEvents}
+                  onShowGoogleEventsChange={setShowGoogleEvents}
                 />
               </CardHeader>
               <CardContent>
@@ -442,7 +445,7 @@ export default function Schedule() {
                   <DayView
                     selectedDate={selectedDate}
                     sessions={sessions}
-                    googleEvents={googleEvents}
+                    googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
                   />
@@ -451,7 +454,7 @@ export default function Schedule() {
                   <WeekView
                     currentDate={currentDate}
                     sessions={sessions}
-                    googleEvents={googleEvents}
+                    googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
                   />
@@ -460,7 +463,7 @@ export default function Schedule() {
                   <MonthView
                     currentDate={currentDate}
                     sessions={sessions}
-                    googleEvents={googleEvents}
+                    googleEvents={showGoogleEvents ? googleEvents : []}
                     selectedDate={selectedDate}
                     onDayClick={(date) => {
                       setSelectedDate(date);

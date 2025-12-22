@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,9 +35,13 @@ import {
   Plus,
   Clock,
   User,
+  Settings2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tables } from '@/integrations/supabase/types';
+import { AvailabilitySettings } from '@/components/schedule/AvailabilitySettings';
+import { BlockedSlots } from '@/components/schedule/BlockedSlots';
+import { GoogleCalendarIntegration } from '@/components/schedule/GoogleCalendarIntegration';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
@@ -60,7 +64,7 @@ const sessionStatusLabels: Record<string, string> = {
 };
 
 export default function Schedule() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -73,6 +77,42 @@ export default function Schedule() {
     notes: '',
     is_recurring: false,
   });
+
+  // Handle Google OAuth callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+
+    if (code && user?.id === state) {
+      // Exchange code for tokens
+      const exchangeCode = async () => {
+        try {
+          const { error } = await supabase.functions.invoke('google-calendar-auth', {
+            body: {
+              action: 'exchange_code',
+              code,
+              redirect_uri: `${window.location.origin}/schedule`,
+            },
+          });
+
+          if (error) throw error;
+
+          toast({ title: 'Google Calendar conectado com sucesso!' });
+          queryClient.invalidateQueries({ queryKey: ['google-calendar-token'] });
+          
+          // Clean URL
+          window.history.replaceState({}, '', '/schedule');
+        } catch (err) {
+          console.error('Error exchanging code:', err);
+          toast({ title: 'Erro ao conectar Google Calendar', variant: 'destructive' });
+          window.history.replaceState({}, '', '/schedule');
+        }
+      };
+
+      exchangeCode();
+    }
+  }, [user?.id, toast, queryClient]);
 
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -288,6 +328,10 @@ export default function Schedule() {
             <TabsTrigger value="calendar">Calendário</TabsTrigger>
             <TabsTrigger value="upcoming">Próximas ({futureSessions.length})</TabsTrigger>
             <TabsTrigger value="past">Anteriores</TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center gap-1">
+              <Settings2 className="h-4 w-4" />
+              Configurações
+            </TabsTrigger>
           </TabsList>
 
           {/* Calendar Tab */}
@@ -471,6 +515,19 @@ export default function Schedule() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Settings Tab */}
+          <TabsContent value="settings" className="space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div className="space-y-6">
+                <AvailabilitySettings />
+                <BlockedSlots />
+              </div>
+              <div>
+                <GoogleCalendarIntegration />
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

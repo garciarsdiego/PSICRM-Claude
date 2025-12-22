@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ResponsiveTable } from '@/components/ui/responsive-table';
 import {
   Dialog,
   DialogContent,
@@ -393,65 +394,65 @@ export default function Financial() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Financeiro</h1>
+            <p className="text-sm lg:text-base text-muted-foreground">
               Gerencie pagamentos e despesas do consultório
             </p>
           </div>
-          <Button onClick={handleExportCSV} variant="outline">
+          <Button onClick={handleExportCSV} variant="outline" size="sm" className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Exportar CSV
           </Button>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Recebido</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Recebido</CardTitle>
               <TrendingUp className="h-4 w-4 text-success" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-success">
                 R$ {totalReceived.toFixed(2)}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pendente</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Pendente</CardTitle>
               <Clock className="h-4 w-4 text-warning" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-warning">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-warning">
                 R$ {totalPending.toFixed(2)}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Despesas</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Despesas</CardTitle>
               <TrendingDown className="h-4 w-4 text-destructive" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-destructive">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-destructive">
                 R$ {totalExpenses.toFixed(2)}
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Lucro Líquido</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Lucro Líquido</CardTitle>
               <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className={`text-lg lg:text-2xl font-bold ${netProfit >= 0 ? 'text-success' : 'text-destructive'}`}>
                 R$ {netProfit.toFixed(2)}
               </div>
             </CardContent>
@@ -460,14 +461,14 @@ export default function Financial() {
 
         {/* Tabs */}
         <Tabs defaultValue="sessions" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="sessions">Sessões</TabsTrigger>
-            <TabsTrigger value="expenses">Despesas</TabsTrigger>
-            <TabsTrigger value="charts" className="flex items-center gap-1">
-              <BarChart3 className="h-4 w-4" />
-              Gráficos
+          <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsTrigger value="sessions" className="text-xs lg:text-sm">Sessões</TabsTrigger>
+            <TabsTrigger value="expenses" className="text-xs lg:text-sm">Despesas</TabsTrigger>
+            <TabsTrigger value="charts" className="flex items-center gap-1 text-xs lg:text-sm">
+              <BarChart3 className="h-3 w-3 lg:h-4 lg:w-4" />
+              <span className="hidden sm:inline">Gráficos</span>
             </TabsTrigger>
-            <TabsTrigger value="report">Relatório</TabsTrigger>
+            <TabsTrigger value="report" className="text-xs lg:text-sm">Relatório</TabsTrigger>
           </TabsList>
 
           {/* Sessions Tab */}
@@ -475,14 +476,14 @@ export default function Financial() {
             {/* Bulk Actions */}
             {selectedSessions.length > 0 && (
               <Card>
-                <CardContent className="py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <Badge variant="secondary">
+                <CardContent className="py-3 px-3 lg:px-6">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 lg:gap-4">
+                      <Badge variant="secondary" className="text-xs">
                         {selectedSessions.length} selecionadas
                       </Badge>
-                      <Button variant="outline" size="sm" onClick={deselectAllSessions}>
-                        Limpar seleção
+                      <Button variant="outline" size="sm" onClick={deselectAllSessions} className="text-xs">
+                        Limpar
                       </Button>
                     </div>
                     <div className="flex gap-2">
@@ -490,17 +491,19 @@ export default function Financial() {
                         variant="outline"
                         size="sm"
                         onClick={() => setIsBulkEditDialogOpen(true)}
+                        className="text-xs"
                       >
-                        <Pencil className="h-4 w-4 mr-1" />
-                        Editar Status
+                        <Pencil className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                       <Button
                         variant="destructive"
                         size="sm"
                         onClick={() => setIsDeleteDialogOpen(true)}
+                        className="text-xs"
                       >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Excluir
+                        <Trash2 className="h-3 w-3 lg:h-4 lg:w-4 mr-1" />
+                        <span className="hidden sm:inline">Excluir</span>
                       </Button>
                     </div>
                   </div>
@@ -510,48 +513,51 @@ export default function Financial() {
 
             {/* Filters */}
             <Card>
-              <CardContent className="py-3">
-                <div className="flex flex-wrap items-center gap-4">
+              <CardContent className="py-3 px-3 lg:px-6">
+                <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 lg:gap-4">
                   <div className="flex items-center gap-2">
                     <Filter className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-medium">Filtros:</span>
+                    <span className="text-xs lg:text-sm font-medium">Filtros:</span>
                   </div>
-                  <Select value={periodFilter} onValueChange={(value: 'all' | 'month' | 'quarter' | 'year') => setPeriodFilter(value)}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Período" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os períodos</SelectItem>
-                      <SelectItem value="month">Este mês</SelectItem>
-                      <SelectItem value="quarter">Este trimestre</SelectItem>
-                      <SelectItem value="year">Este ano</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={paymentStatusFilter} onValueChange={(value: 'all' | 'pending' | 'paid' | 'overdue' | 'cancelled') => setPaymentStatusFilter(value)}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os status</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="paid">Pago</SelectItem>
-                      <SelectItem value="overdue">Atrasado</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-2">
+                    <Select value={periodFilter} onValueChange={(value: 'all' | 'month' | 'quarter' | 'year') => setPeriodFilter(value)}>
+                      <SelectTrigger className="w-32 lg:w-40 h-8 text-xs lg:text-sm">
+                        <SelectValue placeholder="Período" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="month">Este mês</SelectItem>
+                        <SelectItem value="quarter">Trimestre</SelectItem>
+                        <SelectItem value="year">Este ano</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={paymentStatusFilter} onValueChange={(value: 'all' | 'pending' | 'paid' | 'overdue' | 'cancelled') => setPaymentStatusFilter(value)}>
+                      <SelectTrigger className="w-32 lg:w-40 h-8 text-xs lg:text-sm">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="paid">Pago</SelectItem>
+                        <SelectItem value="overdue">Atrasado</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {(periodFilter !== 'all' || paymentStatusFilter !== 'all') && (
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="text-xs"
                       onClick={() => {
                         setPeriodFilter('all');
                         setPaymentStatusFilter('all');
                       }}
                     >
-                      Limpar filtros
+                      Limpar
                     </Button>
                   )}
-                  <Badge variant="outline" className="ml-auto">
+                  <Badge variant="outline" className="ml-auto text-xs">
                     {filteredSessions.length} sessões
                   </Badge>
                 </div>
@@ -559,7 +565,7 @@ export default function Financial() {
             </Card>
 
             <Card>
-              <CardContent className="pt-6">
+              <CardContent className="p-3 lg:pt-6 lg:px-6">
                 {loadingSessions ? (
                   <p className="text-center text-muted-foreground py-8">Carregando...</p>
                 ) : filteredSessions.length === 0 ? (
@@ -569,82 +575,86 @@ export default function Financial() {
                 ) : (
                   <>
                     <div className="flex items-center gap-2 mb-4">
-                      <Button variant="outline" size="sm" onClick={() => setSelectedSessions(filteredSessions.map(s => s.id))}>
+                      <Button variant="outline" size="sm" className="text-xs" onClick={() => setSelectedSessions(filteredSessions.map(s => s.id))}>
                         Selecionar todas
                       </Button>
                     </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-12">
-                            <Checkbox
-                              checked={selectedSessions.length === filteredSessions.length && filteredSessions.length > 0}
-                              onCheckedChange={(checked) => {
-                                if (checked) setSelectedSessions(filteredSessions.map(s => s.id));
-                                else deselectAllSessions();
-                              }}
-                            />
-                          </TableHead>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Paciente</TableHead>
-                          <TableHead>Valor</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredSessions.map((session) => (
-                          <TableRow key={session.id}>
-                            <TableCell>
+                    <ResponsiveTable minWidth="700px">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">
                               <Checkbox
-                                checked={selectedSessions.includes(session.id)}
-                                onCheckedChange={() => toggleSessionSelection(session.id)}
+                                checked={selectedSessions.length === filteredSessions.length && filteredSessions.length > 0}
+                                onCheckedChange={(checked) => {
+                                  if (checked) setSelectedSessions(filteredSessions.map(s => s.id));
+                                  else deselectAllSessions();
+                                }}
                               />
-                            </TableCell>
-                            <TableCell>
-                              {format(new Date(session.scheduled_at), "dd/MM/yyyy 'às' HH:mm", {
-                                locale: ptBR,
-                              })}
-                            </TableCell>
-                            <TableCell>{session.patients?.full_name || 'N/A'}</TableCell>
-                            <TableCell>R$ {Number(session.price).toFixed(2)}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={paymentStatusColors[session.payment_status || 'pending']}
-                              >
-                                {paymentStatusLabels[session.payment_status || 'pending']}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => openEditDialog(session)}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                {session.payment_status !== 'paid' && (
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      updatePaymentStatus.mutate({
-                                        id: session.id,
-                                        status: 'paid',
-                                      })
-                                    }
-                                  >
-                                    <Check className="h-4 w-4" />
-                                  </Button>
-                                )}
-                              </div>
-                            </TableCell>
+                            </TableHead>
+                            <TableHead className="text-xs lg:text-sm">Data</TableHead>
+                            <TableHead className="text-xs lg:text-sm">Paciente</TableHead>
+                            <TableHead className="text-xs lg:text-sm">Valor</TableHead>
+                            <TableHead className="text-xs lg:text-sm">Status</TableHead>
+                            <TableHead className="text-xs lg:text-sm">Ações</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredSessions.map((session) => (
+                            <TableRow key={session.id}>
+                              <TableCell className="p-2 lg:p-4">
+                                <Checkbox
+                                  checked={selectedSessions.includes(session.id)}
+                                  onCheckedChange={() => toggleSessionSelection(session.id)}
+                                />
+                              </TableCell>
+                              <TableCell className="text-xs lg:text-sm p-2 lg:p-4 whitespace-nowrap">
+                                {format(new Date(session.scheduled_at), "dd/MM/yy HH:mm", {
+                                  locale: ptBR,
+                                })}
+                              </TableCell>
+                              <TableCell className="text-xs lg:text-sm p-2 lg:p-4">{session.patients?.full_name || 'N/A'}</TableCell>
+                              <TableCell className="text-xs lg:text-sm p-2 lg:p-4 whitespace-nowrap">R$ {Number(session.price).toFixed(2)}</TableCell>
+                              <TableCell className="p-2 lg:p-4">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-xs ${paymentStatusColors[session.payment_status || 'pending']}`}
+                                >
+                                  {paymentStatusLabels[session.payment_status || 'pending']}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="p-2 lg:p-4">
+                                <div className="flex gap-1">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                    onClick={() => openEditDialog(session)}
+                                  >
+                                    <Pencil className="h-3 w-3 lg:h-4 lg:w-4" />
+                                  </Button>
+                                  {session.payment_status !== 'paid' && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-8 w-8"
+                                      onClick={() =>
+                                        updatePaymentStatus.mutate({
+                                          id: session.id,
+                                          status: 'paid',
+                                        })
+                                      }
+                                    >
+                                      <Check className="h-3 w-3 lg:h-4 lg:w-4" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ResponsiveTable>
                   </>
                 )}
               </CardContent>

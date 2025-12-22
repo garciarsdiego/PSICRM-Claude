@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, addDays, addWeeks, endOfMonth, isBefore, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -86,7 +86,7 @@ export default function Schedule() {
     duration: 50,
     price: '',
     notes: '',
-    is_recurring: false,
+    recurrence_type: 'none' as 'none' | 'weekly' | 'biweekly' | 'monthly',
   });
 
   // Handle Google OAuth callback
@@ -191,6 +191,32 @@ export default function Schedule() {
     enabled: !!profile?.id,
   });
 
+  // Generate recurring dates for the current month
+  const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
+    const dates: Date[] = [startDate];
+    const monthEnd = endOfMonth(startDate);
+    
+    if (recurrenceType === 'none') return dates;
+    
+    let nextDate = startDate;
+    
+    while (true) {
+      if (recurrenceType === 'weekly') {
+        nextDate = addWeeks(nextDate, 1);
+      } else if (recurrenceType === 'biweekly') {
+        nextDate = addWeeks(nextDate, 2);
+      } else if (recurrenceType === 'monthly') {
+        // For monthly, just one session this month
+        break;
+      }
+      
+      if (isAfter(nextDate, monthEnd)) break;
+      dates.push(nextDate);
+    }
+    
+    return dates;
+  };
+
   // Create session mutation
   const createSession = useMutation({
     mutationFn: async (session: typeof newSession) => {
@@ -198,20 +224,30 @@ export default function Schedule() {
       
       const selectedPatient = patients.find(p => p.id === session.patient_id);
       const price = session.price || selectedPatient?.session_price || profile.session_price || 0;
+      const scheduledDate = new Date(session.scheduled_at);
       
-      const { error } = await supabase.from('sessions').insert({
+      // Generate all dates based on recurrence
+      const recurringDates = generateRecurringDates(scheduledDate, session.recurrence_type);
+      
+      // Create sessions for all dates
+      const sessionsToInsert = recurringDates.map((date, index) => ({
         professional_id: profile.user_id,
         patient_id: session.patient_id,
-        scheduled_at: session.scheduled_at,
+        scheduled_at: date.toISOString(),
         duration: session.duration,
         price: Number(price),
         notes: session.notes || null,
-        is_recurring: session.is_recurring,
+        is_recurring: session.recurrence_type !== 'none',
+        recurrence_rule: session.recurrence_type !== 'none' ? session.recurrence_type : null,
         title: `Sessão - ${selectedPatient?.full_name || 'Paciente'}`,
-      });
+      }));
+      
+      const { error } = await supabase.from('sessions').insert(sessionsToInsert);
       if (error) throw error;
+      
+      return recurringDates.length;
     },
-    onSuccess: () => {
+    onSuccess: (count) => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       setIsDialogOpen(false);
       setNewSession({
@@ -220,9 +256,13 @@ export default function Schedule() {
         duration: 50,
         price: '',
         notes: '',
-        is_recurring: false,
+        recurrence_type: 'none',
       });
-      toast({ title: 'Sessão agendada com sucesso!' });
+      toast({ 
+        title: count > 1 
+          ? `${count} sessões agendadas com sucesso!` 
+          : 'Sessão agendada com sucesso!' 
+      });
     },
     onError: () => {
       toast({ title: 'Erro ao agendar sessão', variant: 'destructive' });
@@ -400,14 +440,29 @@ export default function Schedule() {
                     rows={2}
                   />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    checked={newSession.is_recurring}
-                    onCheckedChange={(checked) =>
-                      setNewSession({ ...newSession, is_recurring: checked })
+                <div>
+                  <Label>Recorrência</Label>
+                  <Select
+                    value={newSession.recurrence_type}
+                    onValueChange={(value: 'none' | 'weekly' | 'biweekly' | 'monthly') =>
+                      setNewSession({ ...newSession, recurrence_type: value })
                     }
-                  />
-                  <Label>Sessão recorrente (semanal)</Label>
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a recorrência" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Não recorrente</SelectItem>
+                      <SelectItem value="weekly">Semanal</SelectItem>
+                      <SelectItem value="biweekly">Quinzenal</SelectItem>
+                      <SelectItem value="monthly">Mensal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {newSession.recurrence_type !== 'none' && newSession.scheduled_at && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Serão criadas sessões até o final do mês de {format(new Date(newSession.scheduled_at), 'MMMM', { locale: ptBR })}
+                    </p>
+                  )}
                 </div>
                 <Button
                   className="w-full"

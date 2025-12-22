@@ -39,9 +39,12 @@ export function GoogleCalendarIntegration() {
 
   const connectGoogle = async () => {
     try {
-      // Call edge function to get OAuth URL
+      // Call edge function to get OAuth URL with explicit redirect_uri
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'get_auth_url' },
+        body: { 
+          action: 'get_auth_url',
+          redirect_uri: `${window.location.origin}/schedule`
+        },
       });
 
       if (error) throw error;

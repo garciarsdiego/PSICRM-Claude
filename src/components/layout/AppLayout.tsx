@@ -2,6 +2,7 @@ import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from './Sidebar';
+import { MobileSidebar } from './MobileSidebar';
 import { GlobalSearch } from './GlobalSearch';
 import { Loader2 } from 'lucide-react';
 
@@ -38,9 +39,12 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header with centered search bar */}
-        <header className="flex items-center justify-center px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <GlobalSearch variant="bar" />
+        {/* Header with mobile menu and search */}
+        <header className="flex items-center gap-4 px-4 lg:px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <MobileSidebar />
+          <div className="flex-1 flex justify-center">
+            <GlobalSearch variant="bar" />
+          </div>
         </header>
         <main className="flex-1 overflow-auto">
           {children}

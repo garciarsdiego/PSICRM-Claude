@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { ResponsiveTable } from '@/components/ui/responsive-table';
 import {
   Dialog,
   DialogContent,
@@ -84,6 +85,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import type { Tables } from '@/integrations/supabase/types';
+import { useNavigate } from 'react-router-dom';
 
 type Patient = Tables<'patients'>;
 
@@ -785,41 +787,43 @@ export default function Patients() {
         p.phone?.includes(searchTerm))
   );
 
+  const navigate = useNavigate();
+
   return (
     <AppLayout>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Pacientes</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Pacientes</h1>
+            <p className="text-sm lg:text-base text-muted-foreground">
               Gerencie o cadastro dos seus pacientes
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={exportPatientsToCSV}>
-              <Download className="mr-2 h-4 w-4" />
-              Exportar
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={exportPatientsToCSV} className="text-xs lg:text-sm">
+              <Download className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+              <span className="hidden sm:inline">Exportar</span>
             </Button>
-            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
-              <Upload className="mr-2 h-4 w-4" />
-              Importar
+            <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)} className="text-xs lg:text-sm">
+              <Upload className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+              <span className="hidden sm:inline">Importar</span>
             </Button>
-            <Button onClick={() => openDialog()}>
-              <Plus className="mr-2 h-4 w-4" />
-              Novo Paciente
+            <Button size="sm" onClick={() => openDialog()} className="text-xs lg:text-sm">
+              <Plus className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+              <span className="hidden sm:inline">Novo</span> Paciente
             </Button>
           </div>
         </div>
 
         {/* Search and Filters */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nome, e-mail ou telefone..."
+              placeholder="Buscar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
+              className="pl-10 h-9 text-sm"
             />
           </div>
           <div className="flex items-center gap-2">
@@ -828,8 +832,8 @@ export default function Patients() {
               checked={showInactive}
               onCheckedChange={setShowInactive}
             />
-            <Label htmlFor="show-inactive" className="text-sm whitespace-nowrap">
-              Mostrar inativos
+            <Label htmlFor="show-inactive" className="text-xs lg:text-sm whitespace-nowrap">
+              Inativos
             </Label>
           </div>
         </div>
@@ -837,25 +841,26 @@ export default function Patients() {
         {/* Bulk Actions */}
         {selectedPatients.length > 0 && (
           <Card>
-            <CardContent className="py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Badge variant="secondary">
+            <CardContent className="py-3 px-3 lg:px-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2 lg:gap-4">
+                  <Badge variant="secondary" className="text-xs">
                     <Users className="h-3 w-3 mr-1" />
-                    {selectedPatients.length} selecionados
+                    {selectedPatients.length}
                   </Badge>
-                  <Button variant="outline" size="sm" onClick={deselectAllPatients}>
-                    Limpar seleção
+                  <Button variant="outline" size="sm" onClick={deselectAllPatients} className="text-xs">
+                    Limpar
                   </Button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsBulkEditDialogOpen(true)}
+                    className="text-xs"
                   >
-                    <Edit className="h-4 w-4 mr-1" />
-                    Editar em massa
+                    <Edit className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">Editar</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -863,9 +868,10 @@ export default function Patients() {
                     onClick={() => {
                       bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: true } });
                     }}
+                    className="text-xs"
                   >
-                    <UserCheck className="h-4 w-4 mr-1" />
-                    Ativar
+                    <UserCheck className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">Ativar</span>
                   </Button>
                   <Button
                     variant="outline"
@@ -873,17 +879,19 @@ export default function Patients() {
                     onClick={() => {
                       bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: false } });
                     }}
+                    className="text-xs"
                   >
-                    <UserX className="h-4 w-4 mr-1" />
-                    Desativar
+                    <UserX className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">Desativar</span>
                   </Button>
                   <Button
                     variant="destructive"
                     size="sm"
                     onClick={() => setIsBulkDeleteDialogOpen(true)}
+                    className="text-xs"
                   >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Excluir
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    <span className="hidden sm:inline">Excluir</span>
                   </Button>
                 </div>
               </div>
@@ -892,41 +900,41 @@ export default function Patients() {
         )}
 
         {/* Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Total</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{patients.length}</div>
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold">{patients.length}</div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Ativos</CardTitle>
+            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Ativos</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-success">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-success">
                 {patients.filter((p) => p.is_active).length}
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Vinculados</CardTitle>
+            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Vinculados</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-primary">
                 {patients.filter((p) => p.user_id).length}
               </div>
             </CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Sem Vínculo</CardTitle>
+            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+              <CardTitle className="text-xs lg:text-sm font-medium">Sem Vínculo</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-muted-foreground">
+            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+              <div className="text-lg lg:text-2xl font-bold text-muted-foreground">
                 {patients.filter((p) => !p.user_id).length}
               </div>
             </CardContent>

@@ -13,6 +13,7 @@ import Records from "./pages/Records";
 import Financial from "./pages/Financial";
 import Messages from "./pages/Messages";
 import Emails from "./pages/Emails";
+import EmailTemplates from "./pages/EmailTemplates";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 // Patient Portal
@@ -70,6 +71,11 @@ const App = () => (
             <Route path="/emails" element={
               <ProtectedRoute allowedRole="professional">
                 <Emails />
+              </ProtectedRoute>
+            } />
+            <Route path="/email-templates" element={
+              <ProtectedRoute allowedRole="professional">
+                <EmailTemplates />
               </ProtectedRoute>
             } />
             <Route path="/settings" element={

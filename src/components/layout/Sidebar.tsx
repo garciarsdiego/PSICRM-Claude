@@ -12,6 +12,7 @@ import {
   FileText,
   DollarSign,
   Mail,
+  FileEdit,
   Settings,
   LogOut,
   ChevronLeft,
@@ -28,6 +29,7 @@ const menuItems = [
   { icon: DollarSign, label: 'Financeiro', href: '/financial' },
   { icon: MessageSquare, label: 'Mensagens', href: '/messages' },
   { icon: Mail, label: 'E-mails', href: '/emails' },
+  { icon: FileEdit, label: 'Templates', href: '/email-templates' },
   { icon: Settings, label: 'Configurações', href: '/settings' },
 ];
 

@@ -83,6 +83,7 @@ export function GoogleCalendarIntegration() {
         body: { action: 'sync' },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onSuccess: (data) => {
@@ -93,8 +94,21 @@ export function GoogleCalendarIntegration() {
         description: data?.message || 'Eventos sincronizados com sucesso.',
       });
     },
-    onError: () => {
-      toast({ title: 'Erro ao sincronizar', variant: 'destructive' });
+    onError: (error: Error) => {
+      const errorMessage = error.message || '';
+      if (errorMessage.includes('Invalid token') || errorMessage.includes('session')) {
+        toast({ 
+          title: 'Sessão expirada', 
+          description: 'Por favor, faça login novamente para sincronizar.',
+          variant: 'destructive' 
+        });
+      } else {
+        toast({ 
+          title: 'Erro ao sincronizar', 
+          description: 'Tente reconectar o Google Calendar.',
+          variant: 'destructive' 
+        });
+      }
     },
   });
 

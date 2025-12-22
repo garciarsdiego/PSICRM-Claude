@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,8 +30,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
   Calendar,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Clock,
   User,
@@ -42,6 +40,9 @@ import type { Tables } from '@/integrations/supabase/types';
 import { AvailabilitySettings } from '@/components/schedule/AvailabilitySettings';
 import { BlockedSlots } from '@/components/schedule/BlockedSlots';
 import { GoogleCalendarIntegration } from '@/components/schedule/GoogleCalendarIntegration';
+import { CalendarHeader, CalendarViewType } from '@/components/schedule/CalendarHeader';
+import { DayView } from '@/components/schedule/DayView';
+import { MonthView } from '@/components/schedule/MonthView';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
@@ -68,6 +69,8 @@ export default function Schedule() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [viewType, setViewType] = useState<CalendarViewType>('day');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newSession, setNewSession] = useState({
     patient_id: '',
@@ -131,8 +134,6 @@ export default function Schedule() {
     }
   }, [user?.id, toast, queryClient]);
 
-  const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   // Fetch sessions
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
@@ -220,9 +221,6 @@ export default function Schedule() {
     },
   });
 
-  const getSessionsForDay = (day: Date) => {
-    return sessions.filter((s) => isSameDay(parseISO(s.scheduled_at), day));
-  };
 
   const futureSessions = sessions.filter(
     (s) => new Date(s.scheduled_at) >= new Date() && s.status === 'scheduled'
@@ -355,79 +353,33 @@ export default function Schedule() {
           <TabsContent value="calendar" className="space-y-4">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    {format(currentDate, "MMMM 'de' yyyy", { locale: ptBR })}
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setCurrentDate(addDays(currentDate, -7))}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setCurrentDate(new Date())}
-                    >
-                      Hoje
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setCurrentDate(addDays(currentDate, 7))}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                <CalendarHeader
+                  currentDate={currentDate}
+                  onDateChange={(date) => {
+                    setCurrentDate(date);
+                    setSelectedDate(date);
+                  }}
+                  viewType={viewType}
+                  onViewTypeChange={setViewType}
+                />
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-7 gap-2">
-                  {weekDays.map((day) => (
-                    <div
-                      key={day.toISOString()}
-                      className={cn(
-                        'min-h-32 rounded-lg border p-2',
-                        isSameDay(day, new Date())
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border'
-                      )}
-                    >
-                      <div className="text-xs font-medium text-muted-foreground">
-                        {format(day, 'EEE', { locale: ptBR })}
-                      </div>
-                      <div
-                        className={cn(
-                          'text-lg font-semibold',
-                          isSameDay(day, new Date()) && 'text-primary'
-                        )}
-                      >
-                        {format(day, 'd')}
-                      </div>
-                      <div className="mt-2 space-y-1">
-                        {getSessionsForDay(day).map((session) => (
-                          <div
-                            key={session.id}
-                            className={cn(
-                              'text-xs p-1 rounded truncate cursor-pointer',
-                              sessionStatusColors[session.status || 'scheduled']
-                            )}
-                            title={`${session.patients?.full_name} - ${format(
-                              new Date(session.scheduled_at),
-                              'HH:mm'
-                            )}`}
-                          >
-                            {format(new Date(session.scheduled_at), 'HH:mm')} -{' '}
-                            {session.patients?.full_name?.split(' ')[0]}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {viewType === 'day' ? (
+                  <DayView
+                    selectedDate={selectedDate}
+                    sessions={sessions}
+                  />
+                ) : (
+                  <MonthView
+                    currentDate={currentDate}
+                    sessions={sessions}
+                    selectedDate={selectedDate}
+                    onDayClick={(date) => {
+                      setSelectedDate(date);
+                      setViewType('day');
+                    }}
+                  />
+                )}
               </CardContent>
             </Card>
           </TabsContent>

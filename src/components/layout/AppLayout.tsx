@@ -37,10 +37,15 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
-        {children}
-      </main>
-      <GlobalSearch />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header with centered search bar */}
+        <header className="flex items-center justify-center px-6 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <GlobalSearch variant="bar" />
+        </header>
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

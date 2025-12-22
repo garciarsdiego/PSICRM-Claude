@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+import { format, addWeeks, endOfMonth, isAfter, setHours, setMinutes } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,14 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { TimeSlotPicker } from '@/components/schedule/TimeSlotPicker';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +49,8 @@ import {
   Copy,
   Check,
   Send,
+  Calendar,
+  Clock,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -75,6 +86,13 @@ export default function Patients() {
     clinical_notes: '',
     is_active: true,
   });
+  
+  // Session scheduling state
+  const [scheduleSession, setScheduleSession] = useState(false);
+  const [sessionData, setSessionData] = useState({
+    scheduled_at: '',
+    recurrence_type: 'none' as 'none' | 'weekly' | 'biweekly' | 'monthly',
+  });
 
   // Fetch patients
   const { data: patients = [], isLoading } = useQuery({
@@ -91,6 +109,31 @@ export default function Patients() {
     },
     enabled: !!profile?.user_id,
   });
+
+  // Generate recurring dates for the current month
+  const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
+    const dates: Date[] = [startDate];
+    const monthEnd = endOfMonth(startDate);
+    
+    if (recurrenceType === 'none') return dates;
+    
+    let nextDate = startDate;
+    
+    while (true) {
+      if (recurrenceType === 'weekly') {
+        nextDate = addWeeks(nextDate, 1);
+      } else if (recurrenceType === 'biweekly') {
+        nextDate = addWeeks(nextDate, 2);
+      } else if (recurrenceType === 'monthly') {
+        break;
+      }
+      
+      if (isAfter(nextDate, monthEnd)) break;
+      dates.push(nextDate);
+    }
+    
+    return dates;
+  };
 
   // Create/Update patient mutation
   const savePatient = useMutation({
@@ -115,25 +158,69 @@ export default function Patients() {
         is_active: data.is_active,
       };
 
+      let patientId: string;
+
       if (selectedPatient) {
         const { error } = await supabase
           .from('patients')
           .update(patientData)
           .eq('id', selectedPatient.id);
         if (error) throw error;
+        patientId = selectedPatient.id;
       } else {
-        const { error } = await supabase.from('patients').insert(patientData);
+        const { data: newPatient, error } = await supabase
+          .from('patients')
+          .insert(patientData)
+          .select('id')
+          .single();
         if (error) throw error;
+        patientId = newPatient.id;
       }
+
+      // Create sessions if scheduling is enabled (only for new patients)
+      if (!selectedPatient && scheduleSession && sessionData.scheduled_at) {
+        const scheduledDate = new Date(sessionData.scheduled_at);
+        const recurringDates = generateRecurringDates(scheduledDate, sessionData.recurrence_type);
+        
+        const sessionPrice = data.session_price ? parseFloat(data.session_price) : profile.session_price || 0;
+        
+        const sessionsToInsert = recurringDates.map((date) => ({
+          professional_id: profile.user_id,
+          patient_id: patientId,
+          scheduled_at: date.toISOString(),
+          duration: profile.session_duration || 50,
+          price: Number(sessionPrice),
+          is_recurring: sessionData.recurrence_type !== 'none',
+          recurrence_rule: sessionData.recurrence_type !== 'none' ? sessionData.recurrence_type : null,
+          title: `Sessão - ${data.full_name}`,
+        }));
+        
+        const { error: sessionError } = await supabase.from('sessions').insert(sessionsToInsert);
+        if (sessionError) throw sessionError;
+        
+        return { isNew: true, sessionsCreated: recurringDates.length };
+      }
+
+      return { isNew: !selectedPatient, sessionsCreated: 0 };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
       closeDialog();
-      toast({
-        title: selectedPatient
-          ? 'Paciente atualizado com sucesso!'
-          : 'Paciente cadastrado com sucesso!',
-      });
+      
+      if (result?.sessionsCreated && result.sessionsCreated > 0) {
+        toast({
+          title: result.sessionsCreated > 1
+            ? `Paciente cadastrado e ${result.sessionsCreated} sessões agendadas!`
+            : 'Paciente cadastrado e sessão agendada!',
+        });
+      } else {
+        toast({
+          title: selectedPatient
+            ? 'Paciente atualizado com sucesso!'
+            : 'Paciente cadastrado com sucesso!',
+        });
+      }
     },
     onError: (error) => {
       console.error('Error saving patient:', error);
@@ -284,6 +371,8 @@ export default function Patients() {
     setIsDialogOpen(false);
     setSelectedPatient(null);
     setIsViewMode(false);
+    setScheduleSession(false);
+    setSessionData({ scheduled_at: '', recurrence_type: 'none' });
   };
 
   const openLinkDialog = (patient: Patient) => {
@@ -713,11 +802,70 @@ export default function Patients() {
                 </div>
               </div>
 
+              {/* Schedule First Session - Only for new patients */}
+              {!selectedPatient && !isViewMode && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="font-semibold">Agendar Primeira Sessão</h3>
+                    </div>
+                    <Switch
+                      checked={scheduleSession}
+                      onCheckedChange={setScheduleSession}
+                    />
+                  </div>
+                  
+                  {scheduleSession && (
+                    <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                      <div>
+                        <Label className="mb-2 block">Horário Disponível</Label>
+                        <TimeSlotPicker
+                          onSelect={(date) => {
+                            setSessionData({ ...sessionData, scheduled_at: date.toISOString() });
+                          }}
+                        />
+                        {sessionData.scheduled_at && (
+                          <p className="text-sm text-primary mt-2">
+                            Selecionado: {format(new Date(sessionData.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                          </p>
+                        )}
+                      </div>
+                      
+                      <div>
+                        <Label>Recorrência</Label>
+                        <Select
+                          value={sessionData.recurrence_type}
+                          onValueChange={(value: 'none' | 'weekly' | 'biweekly' | 'monthly') =>
+                            setSessionData({ ...sessionData, recurrence_type: value })
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione a recorrência" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Não recorrente</SelectItem>
+                            <SelectItem value="weekly">Semanal</SelectItem>
+                            <SelectItem value="biweekly">Quinzenal</SelectItem>
+                            <SelectItem value="monthly">Mensal</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {sessionData.recurrence_type !== 'none' && sessionData.scheduled_at && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Serão criadas sessões até o final do mês de {format(new Date(sessionData.scheduled_at), 'MMMM', { locale: ptBR })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {!isViewMode && (
                 <Button
                   className="w-full"
                   onClick={handleSave}
-                  disabled={!formData.full_name || isSaving}
+                  disabled={!formData.full_name || isSaving || (scheduleSession && !sessionData.scheduled_at)}
                 >
                   {isSaving ? (
                     <>
@@ -725,7 +873,7 @@ export default function Patients() {
                       Salvando...
                     </>
                   ) : (
-                    selectedPatient ? 'Salvar Alterações' : 'Cadastrar Paciente'
+                    selectedPatient ? 'Salvar Alterações' : (scheduleSession ? 'Cadastrar e Agendar' : 'Cadastrar Paciente')
                   )}
                 </Button>
               )}

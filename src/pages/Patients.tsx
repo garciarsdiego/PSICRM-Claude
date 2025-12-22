@@ -55,7 +55,12 @@ import {
   Trash2,
   UserX,
   UserCheck,
+  Upload,
+  FileText,
+  Users,
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,6 +98,18 @@ export default function Patients() {
   const [copied, setCopied] = useState(false);
   const [deletePatientId, setDeletePatientId] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(true);
+  
+  // Bulk selection and actions
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
+  const [bulkEditData, setBulkEditData] = useState({ is_active: '', session_price: '' });
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
+  
+  // Import state
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importMode, setImportMode] = useState<'csv' | 'text'>('csv');
+  const [isImporting, setIsImporting] = useState(false);
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -427,6 +444,169 @@ export default function Patients() {
     },
   });
 
+  // Bulk update patients mutation
+  const bulkUpdatePatients = useMutation({
+    mutationFn: async ({ ids, updates }: { ids: string[]; updates: { is_active?: boolean; session_price?: number } }) => {
+      const updateData: Record<string, unknown> = {};
+      if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
+      if (updates.session_price !== undefined) updateData.session_price = updates.session_price;
+      
+      const { error } = await supabase
+        .from('patients')
+        .update(updateData)
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setIsBulkEditDialogOpen(false);
+      setSelectedPatients([]);
+      setBulkEditData({ is_active: '', session_price: '' });
+      toast({ title: `${selectedPatients.length} pacientes atualizados!` });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao atualizar pacientes', variant: 'destructive' });
+    },
+  });
+
+  // Bulk delete patients mutation
+  const bulkDeletePatients = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from('patients')
+        .delete()
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setIsBulkDeleteDialogOpen(false);
+      setSelectedPatients([]);
+      toast({ title: 'Pacientes excluídos com sucesso!' });
+    },
+    onError: () => {
+      toast({ title: 'Erro ao excluir pacientes. Verifique se não há sessões vinculadas.', variant: 'destructive' });
+    },
+  });
+
+  // Import patients mutation
+  const importPatients = useMutation({
+    mutationFn: async (patients: Array<{ full_name: string; email?: string; phone?: string; session_price?: number }>) => {
+      if (!profile?.user_id) throw new Error('Usuário não autenticado');
+      
+      const patientsToInsert = patients.map(p => ({
+        professional_id: profile.user_id,
+        full_name: p.full_name.trim(),
+        email: p.email?.trim() || null,
+        phone: p.phone?.trim() || null,
+        session_price: p.session_price || null,
+        is_active: true,
+      }));
+      
+      const { error } = await supabase
+        .from('patients')
+        .insert(patientsToInsert);
+      if (error) throw error;
+      
+      return patientsToInsert.length;
+    },
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['patients'] });
+      setIsImportDialogOpen(false);
+      setImportText('');
+      toast({ title: `${count} pacientes importados com sucesso!` });
+    },
+    onError: (error) => {
+      console.error('Import error:', error);
+      toast({ title: 'Erro ao importar pacientes', variant: 'destructive' });
+    },
+  });
+
+  const parseCSV = (text: string): Array<{ full_name: string; email?: string; phone?: string; session_price?: number }> => {
+    const lines = text.trim().split('\n');
+    if (lines.length === 0) return [];
+    
+    // Check if first line is header
+    const firstLine = lines[0].toLowerCase();
+    const hasHeader = firstLine.includes('nome') || firstLine.includes('name') || firstLine.includes('email');
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+    
+    return dataLines
+      .filter(line => line.trim())
+      .map(line => {
+        const parts = line.split(/[,;]/).map(p => p.trim().replace(/^["']|["']$/g, ''));
+        return {
+          full_name: parts[0] || '',
+          email: parts[1] || undefined,
+          phone: parts[2] || undefined,
+          session_price: parts[3] ? parseFloat(parts[3]) : undefined,
+        };
+      })
+      .filter(p => p.full_name);
+  };
+
+  const parseText = (text: string): Array<{ full_name: string; email?: string; phone?: string }> => {
+    const lines = text.trim().split('\n');
+    return lines
+      .filter(line => line.trim())
+      .map(line => {
+        const trimmed = line.trim();
+        // Try to extract email if present
+        const emailMatch = trimmed.match(/[\w.-]+@[\w.-]+\.\w+/);
+        const email = emailMatch ? emailMatch[0] : undefined;
+        // Remove email from name if found
+        const name = email ? trimmed.replace(email, '').replace(/[,;-]/, '').trim() : trimmed;
+        return { full_name: name, email };
+      })
+      .filter(p => p.full_name);
+  };
+
+  const handleImport = async () => {
+    if (!importText.trim()) {
+      toast({ title: 'Digite ou cole os dados para importar', variant: 'destructive' });
+      return;
+    }
+    
+    setIsImporting(true);
+    try {
+      const patients = importMode === 'csv' ? parseCSV(importText) : parseText(importText);
+      if (patients.length === 0) {
+        toast({ title: 'Nenhum paciente válido encontrado', variant: 'destructive' });
+        return;
+      }
+      await importPatients.mutateAsync(patients);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setImportText(text);
+    };
+    reader.readAsText(file);
+  };
+
+  // Selection helpers
+  const togglePatientSelection = (id: string) => {
+    setSelectedPatients(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllPatients = () => {
+    setSelectedPatients(filteredPatients.map(p => p.id));
+  };
+
+  const deselectAllPatients = () => {
+    setSelectedPatients([]);
+  };
+
   const copyInviteLink = () => {
     navigator.clipboard.writeText(inviteLink);
     setCopied(true);
@@ -522,10 +702,16 @@ export default function Patients() {
               Gerencie o cadastro dos seus pacientes
             </p>
           </div>
-          <Button onClick={() => openDialog()}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Paciente
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsImportDialogOpen(true)}>
+              <Upload className="mr-2 h-4 w-4" />
+              Importar
+            </Button>
+            <Button onClick={() => openDialog()}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo Paciente
+            </Button>
+          </div>
         </div>
 
         {/* Search and Filters */}
@@ -550,6 +736,63 @@ export default function Patients() {
             </Label>
           </div>
         </div>
+
+        {/* Bulk Actions */}
+        {selectedPatients.length > 0 && (
+          <Card>
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <Badge variant="secondary">
+                    <Users className="h-3 w-3 mr-1" />
+                    {selectedPatients.length} selecionados
+                  </Badge>
+                  <Button variant="outline" size="sm" onClick={deselectAllPatients}>
+                    Limpar seleção
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsBulkEditDialogOpen(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Editar em massa
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: true } });
+                    }}
+                  >
+                    <UserCheck className="h-4 w-4 mr-1" />
+                    Ativar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: false } });
+                    }}
+                  >
+                    <UserX className="h-4 w-4 mr-1" />
+                    Desativar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setIsBulkDeleteDialogOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Excluir
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Stats */}
         <div className="grid gap-4 md:grid-cols-4">
@@ -603,34 +846,55 @@ export default function Patients() {
                 {searchTerm ? 'Nenhum paciente encontrado' : 'Nenhum paciente cadastrado'}
               </p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Paciente</TableHead>
-                    <TableHead>Contato</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Vínculo</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredPatients.map((patient) => (
-                    <TableRow key={patient.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                            <User className="h-5 w-5 text-primary" />
+              <>
+                <div className="flex items-center gap-2 mb-4">
+                  <Button variant="outline" size="sm" onClick={selectAllPatients}>
+                    Selecionar todos
+                  </Button>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedPatients.length === filteredPatients.length && filteredPatients.length > 0}
+                          onCheckedChange={(checked) => {
+                            if (checked) selectAllPatients();
+                            else deselectAllPatients();
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead>Paciente</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Vínculo</TableHead>
+                      <TableHead>Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPatients.map((patient) => (
+                      <TableRow key={patient.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedPatients.includes(patient.id)}
+                            onCheckedChange={() => togglePatientSelection(patient.id)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                              <User className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-medium">{patient.full_name}</p>
+                              {patient.birth_date && (
+                                <p className="text-sm text-muted-foreground">
+                                  Nasc: {format(new Date(patient.birth_date), 'dd/MM/yyyy')}
+                                </p>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium">{patient.full_name}</p>
-                            {patient.birth_date && (
-                              <p className="text-sm text-muted-foreground">
-                                Nasc: {format(new Date(patient.birth_date), 'dd/MM/yyyy')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
                       <TableCell>
                         <div className="space-y-1">
                           {patient.phone && (
@@ -761,6 +1025,7 @@ export default function Patients() {
                   ))}
                 </TableBody>
               </Table>
+              </>
             )}
           </CardContent>
         </Card>
@@ -1199,6 +1464,174 @@ export default function Patients() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Bulk Delete Confirmation */}
+        <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir {selectedPatients.length} paciente(s)? Esta ação não pode ser desfeita.
+                Pacientes com sessões vinculadas não serão excluídos.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => bulkDeletePatients.mutate(selectedPatients)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {bulkDeletePatients.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Excluir Todos'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk Edit Dialog */}
+        <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar {selectedPatients.length} Pacientes</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Status</Label>
+                <Select value={bulkEditData.is_active} onValueChange={(value) => setBulkEditData({ ...bulkEditData, is_active: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Manter atual" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Ativo</SelectItem>
+                    <SelectItem value="false">Inativo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Valor da Sessão (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={bulkEditData.session_price}
+                  onChange={(e) => setBulkEditData({ ...bulkEditData, session_price: e.target.value })}
+                  placeholder="Manter atual"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsBulkEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => {
+                    const updates: { is_active?: boolean; session_price?: number } = {};
+                    if (bulkEditData.is_active) updates.is_active = bulkEditData.is_active === 'true';
+                    if (bulkEditData.session_price) updates.session_price = parseFloat(bulkEditData.session_price);
+                    if (Object.keys(updates).length > 0) {
+                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates });
+                    } else {
+                      toast({ title: 'Selecione ao menos um campo para editar', variant: 'destructive' });
+                    }
+                  }}
+                  disabled={bulkUpdatePatients.isPending}
+                >
+                  {bulkUpdatePatients.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Aplicar a Todos'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Import Dialog */}
+        <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Importar Pacientes</DialogTitle>
+            </DialogHeader>
+            <Tabs value={importMode} onValueChange={(v) => setImportMode(v as 'csv' | 'text')}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="csv">
+                  <FileText className="h-4 w-4 mr-2" />
+                  CSV
+                </TabsTrigger>
+                <TabsTrigger value="text">
+                  <User className="h-4 w-4 mr-2" />
+                  Lista de Nomes
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="csv" className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Carregar arquivo CSV</Label>
+                  <Input
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ou cole os dados CSV</Label>
+                  <Textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="Nome,Email,Telefone,Valor da Sessão&#10;João Silva,joao@email.com,(11) 99999-9999,200&#10;Maria Santos,maria@email.com,(11) 88888-8888,250"
+                    rows={8}
+                    className="font-mono text-sm"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Formato: Nome, Email (opcional), Telefone (opcional), Valor (opcional).
+                  Separador: vírgula ou ponto e vírgula.
+                </p>
+              </TabsContent>
+              <TabsContent value="text" className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Cole a lista de pacientes (um por linha)</Label>
+                  <Textarea
+                    value={importText}
+                    onChange={(e) => setImportText(e.target.value)}
+                    placeholder="João Silva&#10;Maria Santos, maria@email.com&#10;Pedro Oliveira"
+                    rows={10}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Digite um nome por linha. Emails serão detectados automaticamente se incluídos.
+                </p>
+              </TabsContent>
+            </Tabs>
+            {importText && (
+              <div className="bg-muted p-3 rounded-lg">
+                <p className="text-sm font-medium mb-1">Prévia:</p>
+                <p className="text-sm text-muted-foreground">
+                  {importMode === 'csv' ? parseCSV(importText).length : parseText(importText).length} pacientes serão importados
+                </p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setIsImportDialogOpen(false); setImportText(''); }}>
+                Cancelar
+              </Button>
+              <Button onClick={handleImport} disabled={isImporting || !importText.trim()}>
+                {isImporting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Importando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Importar
+                  </>
+                )}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );

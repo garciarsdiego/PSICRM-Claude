@@ -14,6 +14,13 @@ import Messages from "./pages/Messages";
 import Emails from "./pages/Emails";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+// Patient Portal
+import PatientAuth from "./pages/patient/PatientAuth";
+import PatientDashboard from "./pages/patient/PatientDashboard";
+import PatientSessions from "./pages/patient/PatientSessions";
+import PatientPayments from "./pages/patient/PatientPayments";
+import PatientBooking from "./pages/patient/PatientBooking";
+import PatientMessages from "./pages/patient/PatientMessages";
 
 const queryClient = new QueryClient();
 
@@ -35,6 +42,13 @@ const App = () => (
             <Route path="/messages" element={<Messages />} />
             <Route path="/emails" element={<Emails />} />
             <Route path="/settings" element={<Settings />} />
+            {/* Patient Portal Routes */}
+            <Route path="/patient/auth" element={<PatientAuth />} />
+            <Route path="/patient/dashboard" element={<PatientDashboard />} />
+            <Route path="/patient/sessions" element={<PatientSessions />} />
+            <Route path="/patient/payments" element={<PatientPayments />} />
+            <Route path="/patient/book" element={<PatientBooking />} />
+            <Route path="/patient/messages" element={<PatientMessages />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

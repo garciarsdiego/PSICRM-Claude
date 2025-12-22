@@ -185,39 +185,14 @@ export default function PatientAuth() {
       return;
     }
 
-    // If we have an invite, link the patient after signup
+    // If we have an invite, we need to link after the auth state changes
     if (inviteData) {
-      try {
-        // Wait a bit for the user to be created
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const { data: { user: newUser } } = await supabase.auth.getUser();
-        
-        if (newUser && inviteData.patient_id) {
-          // Update patient with user_id
-          await supabase
-            .from('patients')
-            .update({ user_id: newUser.id })
-            .eq('id', inviteData.patient_id);
-        }
-
-        // Mark invite as used
-        await supabase
-          .from('patient_invites')
-          .update({ used_at: new Date().toISOString() })
-          .eq('id', inviteData.id);
-
-        toast({
-          title: 'Conta criada e vinculada!',
-          description: `Você está vinculado ao profissional ${inviteData.professional_name}.`,
-        });
-      } catch (linkError) {
-        console.error('Error linking patient:', linkError);
-        toast({
-          title: 'Conta criada!',
-          description: 'Houve um problema ao vincular. Entre em contato com seu profissional.',
-        });
-      }
+      // Store invite data in sessionStorage for processing after redirect
+      sessionStorage.setItem('pendingInvite', JSON.stringify(inviteData));
+      toast({
+        title: 'Conta criada!',
+        description: 'Vinculando ao profissional...',
+      });
     } else {
       toast({
         title: 'Conta criada com sucesso!',
@@ -227,6 +202,48 @@ export default function PatientAuth() {
 
     setIsLoading(false);
   };
+
+  // Process pending invite after user is authenticated
+  useEffect(() => {
+    const processPendingInvite = async () => {
+      const pendingInviteStr = sessionStorage.getItem('pendingInvite');
+      if (!pendingInviteStr || !user) return;
+
+      try {
+        const pendingInvite = JSON.parse(pendingInviteStr);
+        
+        if (pendingInvite.patient_id) {
+          // Update patient with user_id
+          const { error: updateError } = await supabase
+            .from('patients')
+            .update({ user_id: user.id })
+            .eq('id', pendingInvite.patient_id);
+
+          if (updateError) {
+            console.error('Error linking patient:', updateError);
+          }
+        }
+
+        // Mark invite as used
+        await supabase
+          .from('patient_invites')
+          .update({ used_at: new Date().toISOString() })
+          .eq('id', pendingInvite.id);
+
+        sessionStorage.removeItem('pendingInvite');
+        
+        toast({
+          title: 'Vinculado com sucesso!',
+          description: `Você está vinculado ao profissional ${pendingInvite.professional_name}.`,
+        });
+      } catch (error) {
+        console.error('Error processing invite:', error);
+        sessionStorage.removeItem('pendingInvite');
+      }
+    };
+
+    processPendingInvite();
+  }, [user]);
 
   if (inviteLoading) {
     return (

@@ -77,13 +77,23 @@ serve(async (req) => {
       throw new Error('Missing authorization header');
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    // Use anon key for auth validation, service role for data operations
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } }
+    });
+    
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
 
     if (authError || !user) {
-      throw new Error('Invalid token');
+      console.error('Auth error:', authError?.message);
+      throw new Error('Invalid token - please reconnect your Google Calendar');
     }
+    
+    // Service role client for data operations
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { accessToken, calendarId } = await getValidAccessToken(supabase, user.id);
 

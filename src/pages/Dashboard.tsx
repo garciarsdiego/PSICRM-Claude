@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { DollarSign, Users, Calendar, AlertCircle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
@@ -50,7 +51,7 @@ export default function Dashboard() {
           .select('id', { count: 'exact' })
           .eq('professional_id', user.id)
           .eq('is_active', true),
-        
+
         // Sessões do mês
         supabase
           .from('sessions')
@@ -58,7 +59,7 @@ export default function Dashboard() {
           .eq('professional_id', user.id)
           .gte('scheduled_at', monthStart.toISOString())
           .lte('scheduled_at', monthEnd.toISOString()),
-        
+
         // Sessões de hoje
         supabase
           .from('sessions')
@@ -67,7 +68,7 @@ export default function Dashboard() {
           .gte('scheduled_at', dayStart.toISOString())
           .lte('scheduled_at', dayEnd.toISOString())
           .order('scheduled_at', { ascending: true }),
-        
+
         // Pagamentos pendentes
         supabase
           .from('sessions')
@@ -102,7 +103,7 @@ export default function Dashboard() {
         const mStart = startOfMonth(date);
         const mEnd = endOfMonth(date);
         const monthName = format(date, 'MMM', { locale: ptBR });
-        
+
         const { data: monthSessions } = await supabase
           .from('sessions')
           .select('price')
@@ -110,9 +111,9 @@ export default function Dashboard() {
           .eq('payment_status', 'paid')
           .gte('scheduled_at', mStart.toISOString())
           .lte('scheduled_at', mEnd.toISOString());
-        
+
         const monthRevenue = monthSessions?.reduce((acc, s) => acc + Number(s.price), 0) || 0;
-        
+
         revenueByMonth.push({
           month: monthName,
           revenue: monthRevenue,
@@ -129,48 +130,54 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="p-6 lg:p-8 space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
-            Olá, {profile?.full_name?.split(' ')[0] || 'Profissional'}! 👋
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
-          </p>
+      {loading ? (
+        <div className="p-6 lg:p-8">
+          <DashboardSkeleton />
         </div>
+      ) : (
+        <div className="p-6 lg:p-8 space-y-8">
+          {/* Header */}
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">
+              Olá, {profile?.full_name?.split(' ')[0] || 'Profissional'}! 👋
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
+            </p>
+          </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          <StatsCard
-            title="Receita do Mês"
-            value={`R$ ${stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            icon={<DollarSign className="w-6 h-6" />}
-          />
-          <StatsCard
-            title="Pacientes Ativos"
-            value={stats.activePatients}
-            icon={<Users className="w-6 h-6" />}
-          />
-          <StatsCard
-            title="Sessões do Mês"
-            value={stats.monthSessions}
-            icon={<Calendar className="w-6 h-6" />}
-          />
-          <StatsCard
-            title="Saldo Devedor"
-            value={`R$ ${stats.pendingPayments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            icon={<AlertCircle className="w-6 h-6" />}
-            className="border-warning/50"
-          />
-        </div>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+            <StatsCard
+              title="Receita do Mês"
+              value={`R$ ${stats.monthlyRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              icon={<DollarSign className="w-6 h-6" />}
+            />
+            <StatsCard
+              title="Pacientes Ativos"
+              value={stats.activePatients}
+              icon={<Users className="w-6 h-6" />}
+            />
+            <StatsCard
+              title="Sessões do Mês"
+              value={stats.monthSessions}
+              icon={<Calendar className="w-6 h-6" />}
+            />
+            <StatsCard
+              title="Saldo Devedor"
+              value={`R$ ${stats.pendingPayments.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              icon={<AlertCircle className="w-6 h-6" />}
+              className="border-warning/50"
+            />
+          </div>
 
-        {/* Charts and Sessions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RevenueChart data={revenueData} />
-          <UpcomingSessions sessions={todaySessions} />
+          {/* Charts and Sessions */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <RevenueChart data={revenueData} />
+            <UpcomingSessions sessions={todaySessions} />
+          </div>
         </div>
-      </div>
+      )}
     </AppLayout>
   );
 }

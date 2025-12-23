@@ -65,6 +65,8 @@ import {
 } from 'lucide-react';
 import { PatientAttachments } from '@/components/patient/PatientAttachments';
 import { PatientRecords } from '@/components/patient/PatientRecords';
+import { PatientsSkeleton } from '@/components/skeletons/PatientsSkeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -112,7 +114,7 @@ export default function Patients() {
   const [isBulkEditDialogOpen, setIsBulkEditDialogOpen] = useState(false);
   const [bulkEditData, setBulkEditData] = useState({ is_active: '', session_price: '' });
   const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false);
-  
+
   // Import state
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [importText, setImportText] = useState('');
@@ -134,7 +136,7 @@ export default function Patients() {
     clinical_notes: '',
     is_active: true,
   });
-  
+
   // Session scheduling state
   const [scheduleSession, setScheduleSession] = useState(false);
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(false);
@@ -165,11 +167,11 @@ export default function Patients() {
   const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
     const dates: Date[] = [startDate];
     const monthEnd = endOfMonth(startDate);
-    
+
     if (recurrenceType === 'none') return dates;
-    
+
     let nextDate = startDate;
-    
+
     while (true) {
       if (recurrenceType === 'weekly') {
         nextDate = addWeeks(nextDate, 1);
@@ -178,11 +180,11 @@ export default function Patients() {
       } else if (recurrenceType === 'monthly') {
         break;
       }
-      
+
       if (isAfter(nextDate, monthEnd)) break;
       dates.push(nextDate);
     }
-    
+
     return dates;
   };
 
@@ -233,12 +235,12 @@ export default function Patients() {
       if (!selectedPatient && scheduleSession && sessionData.scheduled_at) {
         const scheduledDate = new Date(sessionData.scheduled_at);
         const recurringDates = generateRecurringDates(scheduledDate, sessionData.recurrence_type);
-        
-        const sessionPrice = sessionData.price 
-          ? parseFloat(sessionData.price) 
+
+        const sessionPrice = sessionData.price
+          ? parseFloat(sessionData.price)
           : (data.session_price ? parseFloat(data.session_price) : profile.session_price || 0);
         const sessionDuration = sessionData.duration || profile.session_duration || 50;
-        
+
         const sessionsToInsert = recurringDates.map((date) => ({
           professional_id: profile.user_id,
           patient_id: patientId,
@@ -249,13 +251,13 @@ export default function Patients() {
           recurrence_rule: sessionData.recurrence_type !== 'none' ? sessionData.recurrence_type : null,
           title: `Sessão - ${data.full_name}`,
         }));
-        
+
         const { data: createdSessions, error: sessionError } = await supabase
           .from('sessions')
           .insert(sessionsToInsert)
           .select('meet_link');
         if (sessionError) throw sessionError;
-        
+
         // Get meet link from first session if available
         if (createdSessions && createdSessions.length > 0) {
           firstSessionMeetLink = createdSessions[0].meet_link;
@@ -265,16 +267,35 @@ export default function Patients() {
       // Send welcome email if enabled
       if (!selectedPatient && sendWelcomeEmail && data.email) {
         try {
-          const welcomeData: any = {
+          const welcomeData: Record<string, string | number | null> = {
             patient_name: data.full_name,
             session_duration: sessionData.duration || profile.session_duration || 50,
           };
-          
+
           if (scheduleSession && sessionData.scheduled_at) {
             const scheduledDate = new Date(sessionData.scheduled_at);
             welcomeData.first_session_date = format(scheduledDate, 'dd/MM/yyyy', { locale: ptBR });
             welcomeData.first_session_time = format(scheduledDate, 'HH:mm');
             welcomeData.meet_link = firstSessionMeetLink;
+          }
+
+          // Generate Invite Link automatically
+          try {
+            const { data: inviteData } = await supabase
+              .from('patient_invites')
+              .insert({
+                professional_id: profile.user_id,
+                patient_id: patientId,
+                email: data.email,
+              })
+              .select('token')
+              .single();
+
+            if (inviteData?.token) {
+              welcomeData.invite_link = `${window.location.origin}/patient/auth?invite=${inviteData.token}`;
+            }
+          } catch (inviteError) {
+            console.error('Error generating auto-invite:', inviteError);
           }
 
           await supabase.functions.invoke('send-gmail', {
@@ -291,10 +312,10 @@ export default function Patients() {
         }
       }
 
-      return { 
-        isNew: !selectedPatient, 
-        sessionsCreated: scheduleSession && sessionData.scheduled_at 
-          ? generateRecurringDates(new Date(sessionData.scheduled_at), sessionData.recurrence_type).length 
+      return {
+        isNew: !selectedPatient,
+        sessionsCreated: scheduleSession && sessionData.scheduled_at
+          ? generateRecurringDates(new Date(sessionData.scheduled_at), sessionData.recurrence_type).length
           : 0,
         emailSent: sendWelcomeEmail && data.email,
       };
@@ -303,19 +324,19 @@ export default function Patients() {
       queryClient.invalidateQueries({ queryKey: ['patients'] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       closeDialog();
-      
+
       let message = selectedPatient ? 'Paciente atualizado com sucesso!' : 'Paciente cadastrado com sucesso!';
-      
+
       if (result?.sessionsCreated && result.sessionsCreated > 0) {
         message = result.sessionsCreated > 1
           ? `Paciente cadastrado e ${result.sessionsCreated} sessões agendadas!`
           : 'Paciente cadastrado e sessão agendada!';
       }
-      
+
       if (result?.emailSent) {
         message += ' E-mail de boas-vindas enviado.';
       }
-      
+
       toast({ title: message });
     },
     onError: (error) => {
@@ -458,7 +479,7 @@ export default function Patients() {
       const updateData: Record<string, unknown> = {};
       if (updates.is_active !== undefined) updateData.is_active = updates.is_active;
       if (updates.session_price !== undefined) updateData.session_price = updates.session_price;
-      
+
       const { error } = await supabase
         .from('patients')
         .update(updateData)
@@ -515,7 +536,7 @@ export default function Patients() {
       clinical_notes?: string;
     }>) => {
       if (!profile?.user_id) throw new Error('Usuário não autenticado');
-      
+
       const patientsToInsert = patientsData.map(p => ({
         professional_id: profile.user_id,
         full_name: p.full_name.trim(),
@@ -533,12 +554,12 @@ export default function Patients() {
         clinical_notes: p.clinical_notes?.trim() || null,
         is_active: true,
       }));
-      
+
       const { error } = await supabase
         .from('patients')
         .insert(patientsToInsert);
       if (error) throw error;
-      
+
       return patientsToInsert.length;
     },
     onSuccess: (count) => {
@@ -556,12 +577,12 @@ export default function Patients() {
   const parseCSV = (text: string) => {
     const lines = text.trim().split('\n');
     if (lines.length === 0) return [];
-    
+
     // Check if first line is header
     const firstLine = lines[0].toLowerCase();
     const hasHeader = firstLine.includes('nome') || firstLine.includes('name') || firstLine.includes('email');
     const dataLines = hasHeader ? lines.slice(1) : lines;
-    
+
     return dataLines
       .filter(line => line.trim())
       .map(line => {
@@ -605,7 +626,7 @@ export default function Patients() {
     const headers = 'nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes';
     const example = 'João Silva,joao@email.com,(11) 99999-9999,200,1990-01-15,123.456.789-00,Rua Exemplo 123,São Paulo,SP,01234-567,Maria Silva,(11) 98888-8888,Observações do paciente';
     const content = `${headers}\n${example}`;
-    
+
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -618,7 +639,7 @@ export default function Patients() {
 
   const exportPatientsToCSV = () => {
     const headers = 'nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes,status';
-    
+
     const rows = patients.map(p => {
       const escape = (val: string | null | undefined) => {
         if (!val) return '';
@@ -626,7 +647,7 @@ export default function Patients() {
         const escaped = val.replace(/"/g, '""');
         return escaped.includes(',') || escaped.includes('"') ? `"${escaped}"` : escaped;
       };
-      
+
       return [
         escape(p.full_name),
         escape(p.email),
@@ -644,7 +665,7 @@ export default function Patients() {
         p.is_active ? 'ativo' : 'inativo',
       ].join(',');
     });
-    
+
     const content = `${headers}\n${rows.join('\n')}`;
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -661,7 +682,7 @@ export default function Patients() {
       toast({ title: 'Digite ou cole os dados para importar', variant: 'destructive' });
       return;
     }
-    
+
     setIsImporting(true);
     try {
       const patients = importMode === 'csv' ? parseCSV(importText) : parseText(importText);
@@ -678,7 +699,7 @@ export default function Patients() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
@@ -791,1008 +812,1017 @@ export default function Patients() {
 
   return (
     <AppLayout>
-      <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Pacientes</h1>
-            <p className="text-sm lg:text-base text-muted-foreground">
-              Gerencie o cadastro dos seus pacientes
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={exportPatientsToCSV} className="text-xs lg:text-sm">
-              <Download className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)} className="text-xs lg:text-sm">
-              <Upload className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
-              <span className="hidden sm:inline">Importar</span>
-            </Button>
-            <Button size="sm" onClick={() => openDialog()} className="text-xs lg:text-sm">
-              <Plus className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
-              <span className="hidden sm:inline">Novo</span> Paciente
-            </Button>
-          </div>
+      {isLoading ? (
+        <div className="p-4 lg:p-6">
+          <PatientsSkeleton />
         </div>
-
-        {/* Search and Filters */}
-        <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 h-9 text-sm"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="show-inactive"
-              checked={showInactive}
-              onCheckedChange={setShowInactive}
-            />
-            <Label htmlFor="show-inactive" className="text-xs lg:text-sm whitespace-nowrap">
-              Inativos
-            </Label>
-          </div>
-        </div>
-
-        {/* Bulk Actions */}
-        {selectedPatients.length > 0 && (
-          <Card>
-            <CardContent className="py-3 px-3 lg:px-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2 lg:gap-4">
-                  <Badge variant="secondary" className="text-xs">
-                    <Users className="h-3 w-3 mr-1" />
-                    {selectedPatients.length}
-                  </Badge>
-                  <Button variant="outline" size="sm" onClick={deselectAllPatients} className="text-xs">
-                    Limpar
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsBulkEditDialogOpen(true)}
-                    className="text-xs"
-                  >
-                    <Edit className="h-3 w-3 mr-1" />
-                    <span className="hidden sm:inline">Editar</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: true } });
-                    }}
-                    className="text-xs"
-                  >
-                    <UserCheck className="h-3 w-3 mr-1" />
-                    <span className="hidden sm:inline">Ativar</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: false } });
-                    }}
-                    className="text-xs"
-                  >
-                    <UserX className="h-3 w-3 mr-1" />
-                    <span className="hidden sm:inline">Desativar</span>
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => setIsBulkDeleteDialogOpen(true)}
-                    className="text-xs"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    <span className="hidden sm:inline">Excluir</span>
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Stats */}
-        <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
-              <CardTitle className="text-xs lg:text-sm font-medium">Total</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
-              <div className="text-lg lg:text-2xl font-bold">{patients.length}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
-              <CardTitle className="text-xs lg:text-sm font-medium">Ativos</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
-              <div className="text-lg lg:text-2xl font-bold text-success">
-                {patients.filter((p) => p.is_active).length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
-              <CardTitle className="text-xs lg:text-sm font-medium">Vinculados</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
-              <div className="text-lg lg:text-2xl font-bold text-primary">
-                {patients.filter((p) => p.user_id).length}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
-              <CardTitle className="text-xs lg:text-sm font-medium">Sem Vínculo</CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
-              <div className="text-lg lg:text-2xl font-bold text-muted-foreground">
-                {patients.filter((p) => !p.user_id).length}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Patients List */}
-        <Card>
-          <CardContent className="pt-6">
-            {isLoading ? (
-              <p className="text-center text-muted-foreground py-8">Carregando...</p>
-            ) : filteredPatients.length === 0 ? (
-              <p className="text-center text-muted-foreground py-8">
-                {searchTerm ? 'Nenhum paciente encontrado' : 'Nenhum paciente cadastrado'}
+      ) : (
+        <div className="p-4 lg:p-6 space-y-4 lg:space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-foreground">Pacientes</h1>
+              <p className="text-sm lg:text-base text-muted-foreground">
+                Gerencie o cadastro dos seus pacientes
               </p>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 mb-4">
-                  <Button variant="outline" size="sm" onClick={selectAllPatients}>
-                    Selecionar todos
-                  </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={exportPatientsToCSV} className="text-xs lg:text-sm">
+                <Download className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+                <span className="hidden sm:inline">Exportar</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setIsImportDialogOpen(true)} className="text-xs lg:text-sm">
+                <Upload className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+                <span className="hidden sm:inline">Importar</span>
+              </Button>
+              <Button size="sm" onClick={() => openDialog()} className="text-xs lg:text-sm">
+                <Plus className="mr-1 lg:mr-2 h-3 w-3 lg:h-4 lg:w-4" />
+                <span className="hidden sm:inline">Novo</span> Paciente
+              </Button>
+            </div>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 h-9 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="show-inactive"
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+              />
+              <Label htmlFor="show-inactive" className="text-xs lg:text-sm whitespace-nowrap">
+                Inativos
+              </Label>
+            </div>
+          </div>
+
+          {/* Bulk Actions */}
+          {selectedPatients.length > 0 && (
+            <Card>
+              <CardContent className="py-3 px-3 lg:px-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 lg:gap-4">
+                    <Badge variant="secondary" className="text-xs">
+                      <Users className="h-3 w-3 mr-1" />
+                      {selectedPatients.length}
+                    </Badge>
+                    <Button variant="outline" size="sm" onClick={deselectAllPatients} className="text-xs">
+                      Limpar
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsBulkEditDialogOpen(true)}
+                      className="text-xs"
+                    >
+                      <Edit className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Editar</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: true } });
+                      }}
+                      className="text-xs"
+                    >
+                      <UserCheck className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Ativar</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        bulkUpdatePatients.mutate({ ids: selectedPatients, updates: { is_active: false } });
+                      }}
+                      className="text-xs"
+                    >
+                      <UserX className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Desativar</span>
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setIsBulkDeleteDialogOpen(true)}
+                      className="text-xs"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      <span className="hidden sm:inline">Excluir</span>
+                    </Button>
+                  </div>
                 </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedPatients.length === filteredPatients.length && filteredPatients.length > 0}
-                          onCheckedChange={(checked) => {
-                            if (checked) selectAllPatients();
-                            else deselectAllPatients();
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>Paciente</TableHead>
-                      <TableHead>Contato</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Vínculo</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredPatients.map((patient) => (
-                      <TableRow key={patient.id}>
-                        <TableCell>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Stats */}
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+                <CardTitle className="text-xs lg:text-sm font-medium">Total</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+                <div className="text-lg lg:text-2xl font-bold">{patients.length}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+                <CardTitle className="text-xs lg:text-sm font-medium">Ativos</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+                <div className="text-lg lg:text-2xl font-bold text-success">
+                  {patients.filter((p) => p.is_active).length}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+                <CardTitle className="text-xs lg:text-sm font-medium">Vinculados</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+                <div className="text-lg lg:text-2xl font-bold text-primary">
+                  {patients.filter((p) => p.user_id).length}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2 p-3 lg:p-6 lg:pb-2">
+                <CardTitle className="text-xs lg:text-sm font-medium">Sem Vínculo</CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 lg:p-6 pt-0 lg:pt-0">
+                <div className="text-lg lg:text-2xl font-bold text-muted-foreground">
+                  {patients.filter((p) => !p.user_id).length}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Patients List */}
+          <Card>
+            <CardContent className="pt-6">
+              {isLoading ? (
+                <p className="text-center text-muted-foreground py-8">Carregando...</p>
+              ) : filteredPatients.length === 0 ? (
+                <EmptyState
+                  icon={Users}
+                  title={searchTerm ? 'Nenhum paciente encontrado' : 'Nenhum paciente cadastrado'}
+                  description={searchTerm ? 'Tente buscar com outros termos.' : 'Comece cadastrando seu primeiro paciente.'}
+                  action={!searchTerm ? { label: 'Novo Paciente', onClick: () => openDialog() } : undefined}
+                  className="py-12"
+                />
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Button variant="outline" size="sm" onClick={selectAllPatients}>
+                      Selecionar todos
+                    </Button>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
                           <Checkbox
-                            checked={selectedPatients.includes(patient.id)}
-                            onCheckedChange={() => togglePatientSelection(patient.id)}
+                            checked={selectedPatients.length === filteredPatients.length && filteredPatients.length > 0}
+                            onCheckedChange={(checked) => {
+                              if (checked) selectAllPatients();
+                              else deselectAllPatients();
+                            }}
                           />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                              <User className="h-5 w-5 text-primary" />
+                        </TableHead>
+                        <TableHead>Paciente</TableHead>
+                        <TableHead>Contato</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Vínculo</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredPatients.map((patient) => (
+                        <TableRow key={patient.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedPatients.includes(patient.id)}
+                              onCheckedChange={() => togglePatientSelection(patient.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                                <User className="h-5 w-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium">{patient.full_name}</p>
+                                {patient.birth_date && (
+                                  <p className="text-sm text-muted-foreground">
+                                    Nasc: {format(new Date(patient.birth_date), 'dd/MM/yyyy')}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{patient.full_name}</p>
-                              {patient.birth_date && (
-                                <p className="text-sm text-muted-foreground">
-                                  Nasc: {format(new Date(patient.birth_date), 'dd/MM/yyyy')}
-                                </p>
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {patient.phone && (
+                                <div className="flex items-center gap-1 text-sm">
+                                  <Phone className="h-3 w-3" />
+                                  {patient.phone}
+                                </div>
+                              )}
+                              {patient.email && (
+                                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                  <Mail className="h-3 w-3" />
+                                  {patient.email}
+                                </div>
                               )}
                             </div>
-                          </div>
-                        </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {patient.phone && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <Phone className="h-3 w-3" />
-                              {patient.phone}
-                            </div>
-                          )}
-                          {patient.email && (
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Mail className="h-3 w-3" />
-                              {patient.email}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            patient.is_active
-                              ? 'bg-success/20 text-success border-success'
-                              : 'bg-muted text-muted-foreground'
-                          }
-                        >
-                          {patient.is_active ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {patient.user_id ? (
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="bg-primary/20 text-primary border-primary">
-                              <Link2 className="h-3 w-3 mr-1" />
-                              Vinculado
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => unlinkPatient.mutate(patient.id)}
-                              title="Remover vínculo"
-                            >
-                              <Unlink className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
+                          </TableCell>
+                          <TableCell>
+                            <Badge
                               variant="outline"
-                              onClick={() => openLinkDialog(patient)}
-                              title="Vincular a conta existente"
+                              className={
+                                patient.is_active
+                                  ? 'bg-success/20 text-success border-success'
+                                  : 'bg-muted text-muted-foreground'
+                              }
                             >
-                              <Link2 className="h-4 w-4 mr-1" />
-                              Vincular
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedPatient(patient);
-                                generateInvite.mutate(patient);
-                              }}
-                              disabled={generateInvite.isPending}
-                              title="Gerar link de convite"
-                            >
-                              {generateInvite.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Send className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openDialog(patient, true)}
-                            title="Ver detalhes"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => openDialog(patient, false)}
-                            title="Editar"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="ghost">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {patient.is_active ? (
-                                <DropdownMenuItem
-                                  onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: false })}
+                              {patient.is_active ? 'Ativo' : 'Inativo'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {patient.user_id ? (
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="bg-primary/20 text-primary border-primary">
+                                  <Link2 className="h-3 w-3 mr-1" />
+                                  Vinculado
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => unlinkPatient.mutate(patient.id)}
+                                  title="Remover vínculo"
                                 >
-                                  <UserX className="h-4 w-4 mr-2" />
-                                  Desativar
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem
-                                  onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: true })}
+                                  <Unlink className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => openLinkDialog(patient)}
+                                  title="Vincular a conta existente"
                                 >
-                                  <UserCheck className="h-4 w-4 mr-2" />
-                                  Reativar
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                onClick={() => setAttachmentsPatient(patient)}
-                              >
-                                <Paperclip className="h-4 w-4 mr-2" />
-                                Anexos
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => setRecordsPatient(patient)}
-                              >
-                                <FileText className="h-4 w-4 mr-2" />
-                                Prontuários
-                              </DropdownMenuItem>
-                              {patient.user_id && (
-                                <DropdownMenuItem
+                                  <Link2 className="h-4 w-4 mr-1" />
+                                  Vincular
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
                                   onClick={() => {
-                                    window.location.href = `/messages?patient=${patient.id}`;
+                                    setSelectedPatient(patient);
+                                    generateInvite.mutate(patient);
                                   }}
+                                  disabled={generateInvite.isPending}
+                                  title="Gerar link de convite"
                                 >
-                                  <MessageSquare className="h-4 w-4 mr-2" />
-                                  Mensagens
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => setDeletePatientId(patient.id)}
-                                className="text-destructive"
+                                  {generateInvite.isPending ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Send className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openDialog(patient, true)}
+                                title="Ver detalhes"
                               >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              </>
-            )}
-          </CardContent>
-        </Card>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openDialog(patient, false)}
+                                title="Editar"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="ghost">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {patient.is_active ? (
+                                    <DropdownMenuItem
+                                      onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: false })}
+                                    >
+                                      <UserX className="h-4 w-4 mr-2" />
+                                      Desativar
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem
+                                      onClick={() => togglePatientStatus.mutate({ patientId: patient.id, isActive: true })}
+                                    >
+                                      <UserCheck className="h-4 w-4 mr-2" />
+                                      Reativar
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => setAttachmentsPatient(patient)}
+                                  >
+                                    <Paperclip className="h-4 w-4 mr-2" />
+                                    Anexos
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setRecordsPatient(patient)}
+                                  >
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Prontuários
+                                  </DropdownMenuItem>
+                                  {patient.user_id && (
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        window.location.href = `/messages?patient=${patient.id}`;
+                                      }}
+                                    >
+                                      <MessageSquare className="h-4 w-4 mr-2" />
+                                      Mensagens
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => setDeletePatientId(patient.id)}
+                                    className="text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Excluir
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-        {/* Patient Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {isViewMode
-                  ? 'Detalhes do Paciente'
-                  : selectedPatient
-                  ? 'Editar Paciente'
-                  : 'Novo Paciente'}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Nome Completo *</Label>
-                  <Input
-                    value={formData.full_name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, full_name: e.target.value })
-                    }
-                    disabled={isViewMode}
-                    placeholder="Nome do paciente"
-                  />
-                </div>
-                <div>
-                  <Label>E-mail</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                    disabled={isViewMode}
-                    placeholder="email@exemplo.com"
-                  />
-                </div>
-                <div>
-                  <Label>Telefone</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                    disabled={isViewMode}
-                    placeholder="(11) 99999-9999"
-                  />
-                </div>
-                <div>
-                  <Label>CPF</Label>
-                  <Input
-                    value={formData.cpf}
-                    onChange={(e) =>
-                      setFormData({ ...formData, cpf: e.target.value })
-                    }
-                    disabled={isViewMode}
-                    placeholder="000.000.000-00"
-                  />
-                </div>
-                <div>
-                  <Label>Data de Nascimento</Label>
-                  <Input
-                    type="date"
-                    value={formData.birth_date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, birth_date: e.target.value })
-                    }
-                    disabled={isViewMode}
-                  />
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Endereço</h3>
+          {/* Patient Dialog */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {isViewMode
+                    ? 'Detalhes do Paciente'
+                    : selectedPatient
+                      ? 'Editar Paciente'
+                      : 'Novo Paciente'}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <Label>Endereço</Label>
+                    <Label>Nome Completo *</Label>
                     <Input
-                      value={formData.address}
+                      value={formData.full_name}
                       onChange={(e) =>
-                        setFormData({ ...formData, address: e.target.value })
+                        setFormData({ ...formData, full_name: e.target.value })
                       }
                       disabled={isViewMode}
-                      placeholder="Rua, número, complemento"
+                      placeholder="Nome do paciente"
                     />
                   </div>
                   <div>
-                    <Label>Cidade</Label>
+                    <Label>E-mail</Label>
                     <Input
-                      value={formData.city}
+                      type="email"
+                      value={formData.email}
                       onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value })
+                        setFormData({ ...formData, email: e.target.value })
                       }
                       disabled={isViewMode}
-                    />
-                  </div>
-                  <div>
-                    <Label>Estado</Label>
-                    <Input
-                      value={formData.state}
-                      onChange={(e) =>
-                        setFormData({ ...formData, state: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="SP"
-                    />
-                  </div>
-                  <div>
-                    <Label>CEP</Label>
-                    <Input
-                      value={formData.zip_code}
-                      onChange={(e) =>
-                        setFormData({ ...formData, zip_code: e.target.value })
-                      }
-                      disabled={isViewMode}
-                      placeholder="00000-000"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Contato de Emergência</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Nome</Label>
-                    <Input
-                      value={formData.emergency_contact}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          emergency_contact: e.target.value,
-                        })
-                      }
-                      disabled={isViewMode}
+                      placeholder="email@exemplo.com"
                     />
                   </div>
                   <div>
                     <Label>Telefone</Label>
                     <Input
-                      value={formData.emergency_phone}
+                      value={formData.phone}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          emergency_phone: e.target.value,
-                        })
+                        setFormData({ ...formData, phone: e.target.value })
                       }
                       disabled={isViewMode}
+                      placeholder="(11) 99999-9999"
                     />
                   </div>
-                </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <h3 className="font-semibold mb-3">Informações de Atendimento</h3>
-                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Valor da Sessão (R$)</Label>
+                    <Label>CPF</Label>
                     <Input
-                      type="number"
-                      step="0.01"
-                      value={formData.session_price}
+                      value={formData.cpf}
                       onChange={(e) =>
-                        setFormData({ ...formData, session_price: e.target.value })
+                        setFormData({ ...formData, cpf: e.target.value })
                       }
                       disabled={isViewMode}
-                      placeholder="Deixe em branco para usar padrão"
+                      placeholder="000.000.000-00"
                     />
                   </div>
-                  <div className="flex items-center space-x-2 pt-6">
-                    <Switch
-                      checked={formData.is_active}
-                      onCheckedChange={(checked) =>
-                        setFormData({ ...formData, is_active: checked })
+                  <div>
+                    <Label>Data de Nascimento</Label>
+                    <Input
+                      type="date"
+                      value={formData.birth_date}
+                      onChange={(e) =>
+                        setFormData({ ...formData, birth_date: e.target.value })
                       }
                       disabled={isViewMode}
                     />
-                    <Label>Paciente Ativo</Label>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <Label>Observações Clínicas</Label>
-                  <Textarea
-                    value={formData.clinical_notes}
-                    onChange={(e) =>
-                      setFormData({ ...formData, clinical_notes: e.target.value })
-                    }
-                    disabled={isViewMode}
-                    placeholder="Anotações gerais sobre o paciente..."
-                    rows={4}
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3">Endereço</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2">
+                      <Label>Endereço</Label>
+                      <Input
+                        value={formData.address}
+                        onChange={(e) =>
+                          setFormData({ ...formData, address: e.target.value })
+                        }
+                        disabled={isViewMode}
+                        placeholder="Rua, número, complemento"
+                      />
+                    </div>
+                    <div>
+                      <Label>Cidade</Label>
+                      <Input
+                        value={formData.city}
+                        onChange={(e) =>
+                          setFormData({ ...formData, city: e.target.value })
+                        }
+                        disabled={isViewMode}
+                      />
+                    </div>
+                    <div>
+                      <Label>Estado</Label>
+                      <Input
+                        value={formData.state}
+                        onChange={(e) =>
+                          setFormData({ ...formData, state: e.target.value })
+                        }
+                        disabled={isViewMode}
+                        placeholder="SP"
+                      />
+                    </div>
+                    <div>
+                      <Label>CEP</Label>
+                      <Input
+                        value={formData.zip_code}
+                        onChange={(e) =>
+                          setFormData({ ...formData, zip_code: e.target.value })
+                        }
+                        disabled={isViewMode}
+                        placeholder="00000-000"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3">Contato de Emergência</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nome</Label>
+                      <Input
+                        value={formData.emergency_contact}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            emergency_contact: e.target.value,
+                          })
+                        }
+                        disabled={isViewMode}
+                      />
+                    </div>
+                    <div>
+                      <Label>Telefone</Label>
+                      <Input
+                        value={formData.emergency_phone}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            emergency_phone: e.target.value,
+                          })
+                        }
+                        disabled={isViewMode}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-3">Informações de Atendimento</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Valor da Sessão (R$)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={formData.session_price}
+                        onChange={(e) =>
+                          setFormData({ ...formData, session_price: e.target.value })
+                        }
+                        disabled={isViewMode}
+                        placeholder="Deixe em branco para usar padrão"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2 pt-6">
+                      <Switch
+                        checked={formData.is_active}
+                        onCheckedChange={(checked) =>
+                          setFormData({ ...formData, is_active: checked })
+                        }
+                        disabled={isViewMode}
+                      />
+                      <Label>Paciente Ativo</Label>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <Label>Observações Clínicas</Label>
+                    <Textarea
+                      value={formData.clinical_notes}
+                      onChange={(e) =>
+                        setFormData({ ...formData, clinical_notes: e.target.value })
+                      }
+                      disabled={isViewMode}
+                      placeholder="Anotações gerais sobre o paciente..."
+                      rows={4}
+                    />
+                  </div>
+                </div>
+
+                {/* Schedule First Session - Only for new patients */}
+                {!selectedPatient && !isViewMode && (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <h3 className="font-semibold">Agendar Primeira Sessão</h3>
+                      </div>
+                      <Switch
+                        checked={scheduleSession}
+                        onCheckedChange={setScheduleSession}
+                      />
+                    </div>
+
+                    {scheduleSession && (
+                      <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
+                        <div>
+                          <Label className="mb-2 block">Horário Disponível</Label>
+                          <TimeSlotPicker
+                            onSelect={(date) => {
+                              setSessionData({ ...sessionData, scheduled_at: date.toISOString() });
+                            }}
+                          />
+                          {sessionData.scheduled_at && (
+                            <p className="text-sm text-primary mt-2">
+                              Selecionado: {format(new Date(sessionData.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label>Duração (min)</Label>
+                            <Input
+                              type="number"
+                              value={sessionData.duration}
+                              onChange={(e) =>
+                                setSessionData({ ...sessionData, duration: parseInt(e.target.value) || 50 })
+                              }
+                              placeholder="50"
+                            />
+                          </div>
+                          <div>
+                            <Label>Valor (R$)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={sessionData.price}
+                              onChange={(e) =>
+                                setSessionData({ ...sessionData, price: e.target.value })
+                              }
+                              placeholder="Valor padrão"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label>Recorrência</Label>
+                          <Select
+                            value={sessionData.recurrence_type}
+                            onValueChange={(value: 'none' | 'weekly' | 'biweekly' | 'monthly') =>
+                              setSessionData({ ...sessionData, recurrence_type: value })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a recorrência" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Não recorrente</SelectItem>
+                              <SelectItem value="weekly">Semanal</SelectItem>
+                              <SelectItem value="biweekly">Quinzenal</SelectItem>
+                              <SelectItem value="monthly">Mensal</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {sessionData.recurrence_type !== 'none' && sessionData.scheduled_at && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Serão criadas sessões até o final do mês de {format(new Date(sessionData.scheduled_at), 'MMMM', { locale: ptBR })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Send Welcome Email - Only for new patients with email */}
+                {!selectedPatient && !isViewMode && formData.email && (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <h3 className="font-semibold">Enviar E-mail de Boas-vindas</h3>
+                          <p className="text-xs text-muted-foreground">
+                            Um e-mail será enviado para {formData.email}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={sendWelcomeEmail}
+                        onCheckedChange={setSendWelcomeEmail}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {!isViewMode && (
+                  <Button
+                    className="w-full"
+                    onClick={handleSave}
+                    disabled={!formData.full_name || isSaving || (scheduleSession && !sessionData.scheduled_at)}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      selectedPatient ? 'Salvar Alterações' : (scheduleSession ? 'Cadastrar e Agendar' : 'Cadastrar Paciente')
+                    )}
+                  </Button>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Link Patient Dialog */}
+          <Dialog open={isLinkDialogOpen} onOpenChange={setIsLinkDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Vincular Paciente</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Digite o e-mail da conta do paciente para vincular. O paciente precisa ter
+                  criado uma conta no Portal do Paciente primeiro.
+                </p>
+                <div>
+                  <Label>E-mail do Paciente</Label>
+                  <Input
+                    type="email"
+                    value={linkEmail}
+                    onChange={(e) => setLinkEmail(e.target.value)}
+                    placeholder="paciente@email.com"
                   />
                 </div>
-              </div>
-
-              {/* Schedule First Session - Only for new patients */}
-              {!selectedPatient && !isViewMode && (
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-semibold">Agendar Primeira Sessão</h3>
-                    </div>
-                    <Switch
-                      checked={scheduleSession}
-                      onCheckedChange={setScheduleSession}
-                    />
-                  </div>
-                  
-                  {scheduleSession && (
-                    <div className="space-y-4 p-4 rounded-lg border bg-muted/30">
-                      <div>
-                        <Label className="mb-2 block">Horário Disponível</Label>
-                        <TimeSlotPicker
-                          onSelect={(date) => {
-                            setSessionData({ ...sessionData, scheduled_at: date.toISOString() });
-                          }}
-                        />
-                        {sessionData.scheduled_at && (
-                          <p className="text-sm text-primary mt-2">
-                            Selecionado: {format(new Date(sessionData.scheduled_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Duração (min)</Label>
-                          <Input
-                            type="number"
-                            value={sessionData.duration}
-                            onChange={(e) =>
-                              setSessionData({ ...sessionData, duration: parseInt(e.target.value) || 50 })
-                            }
-                            placeholder="50"
-                          />
-                        </div>
-                        <div>
-                          <Label>Valor (R$)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={sessionData.price}
-                            onChange={(e) =>
-                              setSessionData({ ...sessionData, price: e.target.value })
-                            }
-                            placeholder="Valor padrão"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <Label>Recorrência</Label>
-                        <Select
-                          value={sessionData.recurrence_type}
-                          onValueChange={(value: 'none' | 'weekly' | 'biweekly' | 'monthly') =>
-                            setSessionData({ ...sessionData, recurrence_type: value })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione a recorrência" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Não recorrente</SelectItem>
-                            <SelectItem value="weekly">Semanal</SelectItem>
-                            <SelectItem value="biweekly">Quinzenal</SelectItem>
-                            <SelectItem value="monthly">Mensal</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {sessionData.recurrence_type !== 'none' && sessionData.scheduled_at && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Serão criadas sessões até o final do mês de {format(new Date(sessionData.scheduled_at), 'MMMM', { locale: ptBR })}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Send Welcome Email - Only for new patients with email */}
-              {!selectedPatient && !isViewMode && formData.email && (
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <h3 className="font-semibold">Enviar E-mail de Boas-vindas</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Um e-mail será enviado para {formData.email}
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={sendWelcomeEmail}
-                      onCheckedChange={setSendWelcomeEmail}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {!isViewMode && (
                 <Button
                   className="w-full"
-                  onClick={handleSave}
-                  disabled={!formData.full_name || isSaving || (scheduleSession && !sessionData.scheduled_at)}
+                  onClick={() =>
+                    selectedPatient &&
+                    linkPatient.mutate({ patientId: selectedPatient.id, email: linkEmail })
+                  }
+                  disabled={!linkEmail || linkPatient.isPending}
                 >
-                  {isSaving ? (
+                  {linkPatient.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Salvando...
+                      Vinculando...
                     </>
                   ) : (
-                    selectedPatient ? 'Salvar Alterações' : (scheduleSession ? 'Cadastrar e Agendar' : 'Cadastrar Paciente')
-                  )}
-                </Button>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Link Patient Dialog */}
-        <Dialog open={isLinkDialogOpen} onOpenChange={setIsLinkDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Vincular Paciente</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Digite o e-mail da conta do paciente para vincular. O paciente precisa ter
-                criado uma conta no Portal do Paciente primeiro.
-              </p>
-              <div>
-                <Label>E-mail do Paciente</Label>
-                <Input
-                  type="email"
-                  value={linkEmail}
-                  onChange={(e) => setLinkEmail(e.target.value)}
-                  placeholder="paciente@email.com"
-                />
-              </div>
-              <Button
-                className="w-full"
-                onClick={() =>
-                  selectedPatient &&
-                  linkPatient.mutate({ patientId: selectedPatient.id, email: linkEmail })
-                }
-                disabled={!linkEmail || linkPatient.isPending}
-              >
-                {linkPatient.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Vinculando...
-                  </>
-                ) : (
-                  <>
-                    <Link2 className="mr-2 h-4 w-4" />
-                    Vincular Conta
-                  </>
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Invite Link Dialog */}
-        <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Link de Convite Gerado</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Envie este link para <strong>{selectedPatient?.full_name}</strong>. 
-                O paciente poderá criar sua conta já vinculada ao seu consultório.
-                O link expira em 7 dias.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  value={inviteLink}
-                  readOnly
-                  className="text-xs"
-                />
-                <Button onClick={copyInviteLink} variant="outline">
-                  {copied ? (
-                    <Check className="h-4 w-4 text-success" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
+                    <>
+                      <Link2 className="mr-2 h-4 w-4" />
+                      Vincular Conta
+                    </>
                   )}
                 </Button>
               </div>
-              {selectedPatient?.email && (
-                <Button
-                  className="w-full"
-                  variant="outline"
-                  onClick={() => {
-                    window.open(
-                      `mailto:${selectedPatient.email}?subject=Convite%20para%20Portal%20do%20Paciente&body=Olá%20${encodeURIComponent(selectedPatient.full_name)},%0A%0AVocê%20foi%20convidado%20para%20acessar%20o%20Portal%20do%20Paciente.%20Clique%20no%20link%20abaixo%20para%20criar%20sua%20conta:%0A%0A${encodeURIComponent(inviteLink)}%0A%0AEste%20link%20expira%20em%207%20dias.`,
-                      '_blank'
-                    );
-                  }}
-                >
-                  <Mail className="mr-2 h-4 w-4" />
-                  Enviar por E-mail
-                </Button>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
 
-        {/* Delete Patient Confirmation */}
-        <AlertDialog open={!!deletePatientId} onOpenChange={(open) => !open && setDeletePatientId(null)}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tem certeza que deseja excluir este paciente? Esta ação não pode ser desfeita.
-                Se houver sessões vinculadas, a exclusão falhará.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => deletePatientId && deletePatient.mutate(deletePatientId)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deletePatient.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Excluir'
+          {/* Invite Link Dialog */}
+          <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Link de Convite Gerado</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Envie este link para <strong>{selectedPatient?.full_name}</strong>.
+                  O paciente poderá criar sua conta já vinculada ao seu consultório.
+                  O link expira em 7 dias.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    value={inviteLink}
+                    readOnly
+                    className="text-xs"
+                  />
+                  <Button onClick={copyInviteLink} variant="outline">
+                    {copied ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                {selectedPatient?.email && (
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    onClick={() => {
+                      window.open(
+                        `mailto:${selectedPatient.email}?subject=Convite%20para%20Portal%20do%20Paciente&body=Olá%20${encodeURIComponent(selectedPatient.full_name)},%0A%0AVocê%20foi%20convidado%20para%20acessar%20o%20Portal%20do%20Paciente.%20Clique%20no%20link%20abaixo%20para%20criar%20sua%20conta:%0A%0A${encodeURIComponent(inviteLink)}%0A%0AEste%20link%20expira%20em%207%20dias.`,
+                        '_blank'
+                      );
+                    }}
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Enviar por E-mail
+                  </Button>
                 )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Bulk Delete Confirmation */}
-        <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tem certeza que deseja excluir {selectedPatients.length} paciente(s)? Esta ação não pode ser desfeita.
-                Pacientes com sessões vinculadas não serão excluídos.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => bulkDeletePatients.mutate(selectedPatients)}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {bulkDeletePatients.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  'Excluir Todos'
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-
-        {/* Bulk Edit Dialog */}
-        <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Editar {selectedPatients.length} Pacientes</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Status</Label>
-                <Select value={bulkEditData.is_active} onValueChange={(value) => setBulkEditData({ ...bulkEditData, is_active: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Manter atual" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="true">Ativo</SelectItem>
-                    <SelectItem value="false">Inativo</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
-              <div>
-                <Label>Valor da Sessão (R$)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={bulkEditData.session_price}
-                  onChange={(e) => setBulkEditData({ ...bulkEditData, session_price: e.target.value })}
-                  placeholder="Manter atual"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsBulkEditDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={() => {
-                    const updates: { is_active?: boolean; session_price?: number } = {};
-                    if (bulkEditData.is_active) updates.is_active = bulkEditData.is_active === 'true';
-                    if (bulkEditData.session_price) updates.session_price = parseFloat(bulkEditData.session_price);
-                    if (Object.keys(updates).length > 0) {
-                      bulkUpdatePatients.mutate({ ids: selectedPatients, updates });
-                    } else {
-                      toast({ title: 'Selecione ao menos um campo para editar', variant: 'destructive' });
-                    }
-                  }}
-                  disabled={bulkUpdatePatients.isPending}
+            </DialogContent>
+          </Dialog>
+
+          {/* Delete Patient Confirmation */}
+          <AlertDialog open={!!deletePatientId} onOpenChange={(open) => !open && setDeletePatientId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir este paciente? Esta ação não pode ser desfeita.
+                  Se houver sessões vinculadas, a exclusão falhará.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deletePatientId && deletePatient.mutate(deletePatientId)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  {bulkUpdatePatients.isPending ? (
+                  {deletePatient.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    'Aplicar a Todos'
+                    'Excluir'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Bulk Delete Confirmation */}
+          <AlertDialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir {selectedPatients.length} paciente(s)? Esta ação não pode ser desfeita.
+                  Pacientes com sessões vinculadas não serão excluídos.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => bulkDeletePatients.mutate(selectedPatients)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {bulkDeletePatients.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Excluir Todos'
+                  )}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Bulk Edit Dialog */}
+          <Dialog open={isBulkEditDialogOpen} onOpenChange={setIsBulkEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Editar {selectedPatients.length} Pacientes</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Status</Label>
+                  <Select value={bulkEditData.is_active} onValueChange={(value) => setBulkEditData({ ...bulkEditData, is_active: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Manter atual" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Ativo</SelectItem>
+                      <SelectItem value="false">Inativo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Valor da Sessão (R$)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={bulkEditData.session_price}
+                    onChange={(e) => setBulkEditData({ ...bulkEditData, session_price: e.target.value })}
+                    placeholder="Manter atual"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setIsBulkEditDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      const updates: { is_active?: boolean; session_price?: number } = {};
+                      if (bulkEditData.is_active) updates.is_active = bulkEditData.is_active === 'true';
+                      if (bulkEditData.session_price) updates.session_price = parseFloat(bulkEditData.session_price);
+                      if (Object.keys(updates).length > 0) {
+                        bulkUpdatePatients.mutate({ ids: selectedPatients, updates });
+                      } else {
+                        toast({ title: 'Selecione ao menos um campo para editar', variant: 'destructive' });
+                      }
+                    }}
+                    disabled={bulkUpdatePatients.isPending}
+                  >
+                    {bulkUpdatePatients.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Aplicar a Todos'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Import Dialog */}
+          <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Importar Pacientes</DialogTitle>
+              </DialogHeader>
+              <Tabs value={importMode} onValueChange={(v) => setImportMode(v as 'csv' | 'text')}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="csv">
+                    <FileText className="h-4 w-4 mr-2" />
+                    CSV
+                  </TabsTrigger>
+                  <TabsTrigger value="text">
+                    <User className="h-4 w-4 mr-2" />
+                    Lista de Nomes
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="csv" className="space-y-4">
+                  <div className="flex gap-2">
+                    <div className="flex-1 space-y-2">
+                      <Label>Carregar arquivo CSV</Label>
+                      <Input
+                        type="file"
+                        accept=".csv,.txt"
+                        onChange={handleFileUpload}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button variant="outline" onClick={downloadTemplate}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Baixar Template
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ou cole os dados CSV</Label>
+                    <Textarea
+                      value={importText}
+                      onChange={(e) => setImportText(e.target.value)}
+                      placeholder="nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes&#10;João Silva,joao@email.com,(11) 99999-9999,200,1990-01-15,123.456.789-00,Rua A,SP,SP,01234-567,Maria,(11) 8888-8888,Obs"
+                      rows={8}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Campos: Nome, Email, Telefone, Valor, Data Nascimento (AAAA-MM-DD), CPF, Endereço, Cidade, Estado, CEP, Contato Emergência, Tel. Emergência, Observações.
+                  </p>
+                </TabsContent>
+                <TabsContent value="text" className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Cole a lista de pacientes (um por linha)</Label>
+                    <Textarea
+                      value={importText}
+                      onChange={(e) => setImportText(e.target.value)}
+                      placeholder="João Silva&#10;Maria Santos, maria@email.com&#10;Pedro Oliveira"
+                      rows={10}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Digite um nome por linha. Emails serão detectados automaticamente se incluídos.
+                  </p>
+                </TabsContent>
+              </Tabs>
+              {importText && (
+                <div className="bg-muted p-3 rounded-lg">
+                  <p className="text-sm font-medium mb-1">Prévia:</p>
+                  <p className="text-sm text-muted-foreground">
+                    {importMode === 'csv' ? parseCSV(importText).length : parseText(importText).length} pacientes serão importados
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setIsImportDialogOpen(false); setImportText(''); }}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleImport} disabled={isImporting || !importText.trim()}>
+                  {isImporting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Importando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Importar
+                    </>
                   )}
                 </Button>
               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Import Dialog */}
-        <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Importar Pacientes</DialogTitle>
-            </DialogHeader>
-            <Tabs value={importMode} onValueChange={(v) => setImportMode(v as 'csv' | 'text')}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="csv">
-                  <FileText className="h-4 w-4 mr-2" />
-                  CSV
-                </TabsTrigger>
-                <TabsTrigger value="text">
-                  <User className="h-4 w-4 mr-2" />
-                  Lista de Nomes
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="csv" className="space-y-4">
-                <div className="flex gap-2">
-                  <div className="flex-1 space-y-2">
-                    <Label>Carregar arquivo CSV</Label>
-                    <Input
-                      type="file"
-                      accept=".csv,.txt"
-                      onChange={handleFileUpload}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button variant="outline" onClick={downloadTemplate}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Baixar Template
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Ou cole os dados CSV</Label>
-                  <Textarea
-                    value={importText}
-                    onChange={(e) => setImportText(e.target.value)}
-                    placeholder="nome,email,telefone,valor_sessao,data_nascimento,cpf,endereco,cidade,estado,cep,contato_emergencia,telefone_emergencia,observacoes&#10;João Silva,joao@email.com,(11) 99999-9999,200,1990-01-15,123.456.789-00,Rua A,SP,SP,01234-567,Maria,(11) 8888-8888,Obs"
-                    rows={8}
-                    className="font-mono text-sm"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Campos: Nome, Email, Telefone, Valor, Data Nascimento (AAAA-MM-DD), CPF, Endereço, Cidade, Estado, CEP, Contato Emergência, Tel. Emergência, Observações.
-                </p>
-              </TabsContent>
-              <TabsContent value="text" className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Cole a lista de pacientes (um por linha)</Label>
-                  <Textarea
-                    value={importText}
-                    onChange={(e) => setImportText(e.target.value)}
-                    placeholder="João Silva&#10;Maria Santos, maria@email.com&#10;Pedro Oliveira"
-                    rows={10}
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Digite um nome por linha. Emails serão detectados automaticamente se incluídos.
-                </p>
-              </TabsContent>
-            </Tabs>
-            {importText && (
-              <div className="bg-muted p-3 rounded-lg">
-                <p className="text-sm font-medium mb-1">Prévia:</p>
-                <p className="text-sm text-muted-foreground">
-                  {importMode === 'csv' ? parseCSV(importText).length : parseText(importText).length} pacientes serão importados
-                </p>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setIsImportDialogOpen(false); setImportText(''); }}>
-                Cancelar
-              </Button>
-              <Button onClick={handleImport} disabled={isImporting || !importText.trim()}>
-                {isImporting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Importando...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Importar
-                  </>
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {/* Patient Attachments Dialog */}
-      {attachmentsPatient && profile?.user_id && (
-        <PatientAttachments
-          patientId={attachmentsPatient.id}
-          professionalId={profile.user_id}
-          patientName={attachmentsPatient.full_name}
-          isOpen={!!attachmentsPatient}
-          onClose={() => setAttachmentsPatient(null)}
-        />
-      )}
-
-      {/* Patient Records Dialog */}
-      {recordsPatient && profile?.user_id && (
-        <Dialog open={!!recordsPatient} onOpenChange={(open) => !open && setRecordsPatient(null)}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Prontuários - {recordsPatient.full_name}</DialogTitle>
-            </DialogHeader>
-            <PatientRecords
-              patientId={recordsPatient.id}
-              patientName={recordsPatient.full_name}
+            </DialogContent>
+          </Dialog>
+          {/* Patient Attachments Dialog */}
+          {attachmentsPatient && profile?.user_id && (
+            <PatientAttachments
+              patientId={attachmentsPatient.id}
               professionalId={profile.user_id}
+              patientName={attachmentsPatient.full_name}
+              isOpen={!!attachmentsPatient}
+              onClose={() => setAttachmentsPatient(null)}
             />
-          </DialogContent>
-        </Dialog>
+          )}
+
+          {/* Patient Records Dialog */}
+          {recordsPatient && profile?.user_id && (
+            <Dialog open={!!recordsPatient} onOpenChange={(open) => !open && setRecordsPatient(null)}>
+              <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Prontuários - {recordsPatient.full_name}</DialogTitle>
+                </DialogHeader>
+                <PatientRecords
+                  patientId={recordsPatient.id}
+                  patientName={recordsPatient.full_name}
+                  professionalId={profile.user_id}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
       )}
     </AppLayout>
   );

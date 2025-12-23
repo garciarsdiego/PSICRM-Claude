@@ -16,7 +16,7 @@ interface StatsCardProps {
 
 export function StatsCard({ title, value, subtitle, icon, trend, className }: StatsCardProps) {
   return (
-    <Card className={cn('hover:shadow-md transition-shadow', className)}>
+    <Card className={cn('hover:shadow-md transition-all duration-300 bg-white/60 dark:bg-card/40 backdrop-blur-md border-white/20 dark:border-border/50', className)}>
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="space-y-2">

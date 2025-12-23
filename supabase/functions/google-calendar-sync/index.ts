@@ -69,7 +69,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action } = await req.json();
+    const { action, google_event_id } = await req.json();
     console.log('Sync action:', action);
 
     const authHeader = req.headers.get('Authorization');
@@ -78,24 +78,42 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    
+
     // Use anon key for auth validation, service role for data operations
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     });
-    
+
     const { data: { user }, error: authError } = await authClient.auth.getUser();
 
     if (authError || !user) {
       console.error('Auth error:', authError?.message);
       throw new Error('Invalid token - please reconnect your Google Calendar');
     }
-    
+
     // Service role client for data operations
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { accessToken, calendarId } = await getValidAccessToken(supabase, user.id);
+
+    if (action === 'delete_event' && google_event_id) {
+      console.log(`Deleting single event: ${google_event_id}`);
+      try {
+        await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${google_event_id}?sendUpdates=all`,
+          {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${accessToken}` },
+          }
+        );
+      } catch (e) {
+        console.error('Delete error', e);
+      }
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
 
     if (action === 'sync') {
       // Get sessions that need syncing (no google_event_id or updated recently)
@@ -103,8 +121,8 @@ serve(async (req) => {
         .from('sessions')
         .select('*, patients(full_name, email)')
         .eq('professional_id', user.id)
-        .eq('status', 'scheduled')
-        .gte('scheduled_at', new Date().toISOString());
+        //.eq('status', 'scheduled')
+        .gte('scheduled_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
 
       if (sessionsError) throw sessionsError;
 
@@ -115,6 +133,33 @@ serve(async (req) => {
 
       // Sync sessions to Google Calendar with Meet links
       for (const session of sessions || []) {
+        // Handle Cancellations
+        if (session.status === 'cancelled' || session.status === 'no_show') {
+          if (session.google_event_id) {
+            try {
+              console.log(`Deleting cancelled event: ${session.google_event_id}`);
+              await fetch(
+                `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${session.google_event_id}?sendUpdates=all`,
+                {
+                  method: 'DELETE',
+                  headers: { 'Authorization': `Bearer ${accessToken}` },
+                }
+              );
+
+              // Clear google_event_id
+              await supabase
+                .from('sessions')
+                .update({ google_event_id: null })
+                .eq('id', session.id);
+
+              synced++;
+            } catch (err) {
+              console.error('Error deleting event:', err);
+            }
+          }
+          continue;
+        }
+
         const startTime = new Date(session.scheduled_at);
         const endTime = new Date(startTime.getTime() + (session.duration || 50) * 60 * 1000);
 
@@ -146,7 +191,7 @@ serve(async (req) => {
           if (session.google_event_id) {
             // Update existing event
             response = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${session.google_event_id}?conferenceDataVersion=1`,
+              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events/${session.google_event_id}?conferenceDataVersion=1&sendUpdates=all`,
               {
                 method: 'PUT',
                 headers: {
@@ -159,7 +204,7 @@ serve(async (req) => {
           } else {
             // Create new event with Meet link
             response = await fetch(
-              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?conferenceDataVersion=1`,
+              `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?conferenceDataVersion=1&sendUpdates=all`,
               {
                 method: 'POST',
                 headers: {
@@ -176,15 +221,15 @@ serve(async (req) => {
               const meetLink = createdEvent.conferenceData?.entryPoints?.find(
                 (e: any) => e.entryPointType === 'video'
               )?.uri || null;
-              
+
               await supabase
                 .from('sessions')
-                .update({ 
+                .update({
                   google_event_id: createdEvent.id,
                   meet_link: meetLink
                 })
                 .eq('id', session.id);
-              
+
               console.log('Created event with Meet link:', meetLink);
             }
           }
@@ -233,11 +278,11 @@ serve(async (req) => {
           if (!event.start) continue;
 
           const isAllDay = !event.start.dateTime;
-          const startTime = isAllDay 
-            ? new Date(event.start.date + 'T00:00:00') 
+          const startTime = isAllDay
+            ? new Date(event.start.date + 'T00:00:00')
             : new Date(event.start.dateTime);
-          const endTime = isAllDay 
-            ? new Date(event.end.date + 'T23:59:59') 
+          const endTime = isAllDay
+            ? new Date(event.end.date + 'T23:59:59')
             : new Date(event.end?.dateTime || startTime);
 
           // Determine event type based on title keywords
@@ -268,8 +313,8 @@ serve(async (req) => {
 
           const { error: upsertError } = await supabase
             .from('google_calendar_events')
-            .upsert(eventData, { 
-              onConflict: 'professional_id,google_event_id' 
+            .upsert(eventData, {
+              onConflict: 'professional_id,google_event_id'
             });
 
           if (!upsertError && !importedEventIds.has(event.id)) {
@@ -330,9 +375,9 @@ serve(async (req) => {
         .eq('professional_id', user.id);
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          synced, 
+        JSON.stringify({
+          success: true,
+          synced,
           imported,
           message: `${synced} sessões sincronizadas, ${imported} eventos importados`
         }),

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'professional' | 'patient';
+type AppRole = 'professional' | 'patient' | 'admin';
 
 interface AuthContextType {
   user: User | null;
@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           setTimeout(() => {
             fetchUserData(session.user.id);
@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         fetchUserData(session.user.id);
       } else {
@@ -58,24 +58,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
-      const [roleResult, profileResult] = await Promise.all([
-        supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', userId)
-          .maybeSingle(),
-        supabase
-          .from('profiles')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle()
-      ]);
+      // Role is now in profiles table
+      // Query both id and user_id to handle legacy and new users
+      let query = supabase
+        .from('profiles')
+        .select('*')
+        .or(`id.eq.${userId},user_id.eq.${userId}`)
+        .maybeSingle();
 
-      if (roleResult.data) {
-        setRole(roleResult.data.role as AppRole);
+      let { data: profileData, error } = await query;
+
+      // Self-healing: If profile missing, create it
+      if (!profileData && !error) {
+        console.warn("Profile missing. Attempting self-healing via create_my_profile...");
+        const { error: rpcError } = await supabase.rpc('create_my_profile');
+        if (!rpcError) {
+          // Retry fetch
+          const retry = await supabase
+            .from('profiles')
+            .select('*')
+            .or(`id.eq.${userId},user_id.eq.${userId}`)
+            .maybeSingle();
+          profileData = retry.data;
+          error = retry.error;
+        } else {
+          console.error("Self-healing failed:", rpcError);
+        }
       }
-      if (profileResult.data) {
-        setProfile(profileResult.data);
+
+      if (profileData) {
+        // Self-fix: If status is missing, update it to pending
+        if (!profileData.status) {
+          console.warn("Status missing. Self-fixing to 'pending'...");
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ status: 'pending' })
+            .eq('id', userId);
+
+          if (!updateError) {
+            profileData.status = 'pending';
+          } else {
+            console.error("Self-fix status failed:", updateError);
+          }
+        }
+
+        setProfile(profileData);
+        // The migration added 'role' column to profiles, so we use it directly
+        // Cast to unknown first to avoid TS error if types are outdated
+        setRole((profileData as any).role as AppRole);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
@@ -94,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, role: AppRole = 'professional') => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,

@@ -63,7 +63,7 @@ async function getValidAccessToken(supabase: any, userId: string): Promise<strin
 
 function createEmailBody(to: string, from: string, subject: string, htmlContent: string): string {
   const boundary = 'boundary_' + Date.now();
-  
+
   const email = [
     `From: ${from}`,
     `To: ${to}`,
@@ -122,9 +122,9 @@ serve(async (req) => {
 
     // Generate email based on template
     if (template === 'session_reminder') {
-      const templateContent = emailSettings?.session_reminder_template || 
+      const templateContent = emailSettings?.session_reminder_template ||
         'Olá {{nome}}, lembrete: sua sessão está agendada para {{data}} às {{hora}}.';
-      
+
       emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #8B5CF6, #A78BFA); padding: 30px; border-radius: 10px 10px 0 0;">
@@ -133,9 +133,9 @@ serve(async (req) => {
           <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
             <p style="font-size: 16px; color: #374151;">
               ${templateContent
-                .replace('{{nome}}', data.patient_name)
-                .replace('{{data}}', data.date)
-                .replace('{{hora}}', data.time)}
+          .replace('{{nome}}', data.patient_name)
+          .replace('{{data}}', data.date)
+          .replace('{{hora}}', data.time)}
             </p>
             ${data.meet_link ? `
               <div style="background: #EDE9FE; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -197,9 +197,9 @@ serve(async (req) => {
       `;
       emailSubject = `Sessão confirmada para ${data.date} às ${data.time}`;
     } else if (template === 'payment_reminder') {
-      const templateContent = emailSettings?.payment_reminder_template || 
+      const templateContent = emailSettings?.payment_reminder_template ||
         'Olá {{nome}}, você tem {{sessoes}} sessão(ões) pendente(s) no valor de R$ {{valor}}.';
-      
+
       emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="background: linear-gradient(135deg, #F59E0B, #FBBF24); padding: 30px; border-radius: 10px 10px 0 0;">
@@ -208,9 +208,9 @@ serve(async (req) => {
           <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px;">
             <p style="font-size: 16px; color: #374151;">
               ${templateContent
-                .replace('{{nome}}', data.patient_name)
-                .replace('{{sessoes}}', data.sessions_count)
-                .replace('{{valor}}', data.total_amount)}
+          .replace('{{nome}}', data.patient_name)
+          .replace('{{sessoes}}', data.sessions_count)
+          .replace('{{valor}}', data.total_amount)}
             </p>
             <div style="background: #FEF3C7; padding: 20px; border-radius: 8px; margin: 20px 0;">
               <p style="margin: 0 0 10px 0; color: #92400E;">
@@ -270,9 +270,23 @@ serve(async (req) => {
               ${profile.phone ? `📞 ${profile.phone}` : ''}<br>
               ${profile.email ? `✉️ ${profile.email}` : ''}
             </p>
+            ${data.invite_link ? `
+              <div style="background: #eff6ff; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center; border: 1px solid #bfdbfe;">
+                <p style="margin: 0 0 10px 0; color: #1e40af; font-weight: bold;">
+                  Acesse sua área exclusiva:
+                </p>
+                <a href="${data.invite_link}" style="display: inline-block; background: #2563eb; color: white; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: bold;">
+                  Criar minha conta
+                </a>
+                <p style="margin: 10px 0 0 0; font-size: 12px; color: #64748b;">
+                  Ou acesse: ${data.invite_link}
+                </p>
+              </div>
+            ` : ''}
           </div>
         </div>
       `;
+      emailHtml = emailHtml.replace('{{link_convite}}', data.invite_link || '');
       emailSubject = `Bem-vindo(a) ao consultório de ${profile.full_name}`;
     }
 

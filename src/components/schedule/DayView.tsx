@@ -1,7 +1,7 @@
 import { format, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Calendar, Users, Briefcase, Plane, Clock } from 'lucide-react';
+import { Calendar, Users, Briefcase, Plane, Clock, Plus } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
@@ -16,6 +16,7 @@ interface DayViewProps {
   googleEvents?: GoogleCalendarEvent[];
   onSessionClick?: (session: Session) => void;
   onDropSession?: (sessionId: string, newDate: Date) => void;
+  onEmptySlotClick?: (date: Date) => void;
 }
 
 const sessionStatusColors: Record<string, string> = {
@@ -37,12 +38,12 @@ const eventTypeStyles: Record<string, { bg: string; border: string; icon: typeof
 // Hours from 08:00 to 22:00
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8);
 
-export function DayView({ selectedDate, sessions, googleEvents = [], onSessionClick, onDropSession }: DayViewProps) {
-  const daySessions = sessions.filter((s) => 
+export function DayView({ selectedDate, sessions, googleEvents = [], onSessionClick, onDropSession, onEmptySlotClick }: DayViewProps) {
+  const daySessions = sessions.filter((s) =>
     isSameDay(parseISO(s.scheduled_at), selectedDate)
   );
 
-  const dayGoogleEvents = googleEvents.filter((e) => 
+  const dayGoogleEvents = googleEvents.filter((e) =>
     isSameDay(parseISO(e.start_time), selectedDate)
   );
 
@@ -90,17 +91,17 @@ export function DayView({ selectedDate, sessions, googleEvents = [], onSessionCl
       <h3 className="text-lg font-semibold text-foreground">
         {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
       </h3>
-      
+
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         {HOURS.map((hour) => {
           const hourSessions = getSessionsForHour(hour);
           const hourGoogleEvents = getGoogleEventsForHour(hour);
           const hasItems = hourSessions.length > 0 || hourGoogleEvents.length > 0;
-          
+
           return (
-            <div 
-              key={hour} 
-              className="flex border-b border-border last:border-b-0 min-h-16"
+            <div
+              key={hour}
+              className="flex border-b border-border last:border-b-0 min-h-16 group transition-colors hover:bg-muted/50 relative"
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, hour)}
             >
@@ -108,22 +109,39 @@ export function DayView({ selectedDate, sessions, googleEvents = [], onSessionCl
               <div className="w-16 flex-shrink-0 border-r border-border bg-muted/30 p-2 text-sm text-muted-foreground font-medium">
                 {String(hour).padStart(2, '0')}:00
               </div>
-              
+
               {/* Sessions and events column */}
               <div className="flex-1 relative p-1">
+                {/* Empty Slot Click Trigger */}
+                <div
+                  className="absolute inset-0 z-0 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+                  onClick={() => {
+                    const slotDate = new Date(selectedDate);
+                    slotDate.setHours(hour, 0, 0, 0);
+                    onEmptySlotClick?.(slotDate);
+                  }}
+                >
+                  <div className="bg-primary/10 text-primary rounded-full p-1 shadow-sm">
+                    <Plus className="w-4 h-4" />
+                  </div>
+                </div>
+
                 {!hasItems ? (
                   <div className="h-full w-full" />
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-1 relative z-10">
                     {/* Sessions */}
                     {hourSessions.map((session) => (
                       <div
                         key={session.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, session)}
-                        onClick={() => onSessionClick?.(session)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSessionClick?.(session);
+                        }}
                         className={cn(
-                          'p-2 rounded cursor-pointer transition-all border-l-4',
+                          'p-2 rounded cursor-pointer transition-all border-l-4 shadow-sm',
                           'hover:opacity-80 hover:shadow-md',
                           sessionStatusColors[session.status || 'scheduled']
                         )}
@@ -141,17 +159,17 @@ export function DayView({ selectedDate, sessions, googleEvents = [], onSessionCl
                         </div>
                       </div>
                     ))}
-                    
+
                     {/* Google Calendar Events */}
                     {hourGoogleEvents.map((event) => {
                       const style = getEventStyle(event);
                       const IconComponent = style.icon;
-                      
+
                       return (
                         <div
                           key={event.id}
                           className={cn(
-                            'p-2 rounded border-l-4 text-foreground',
+                            'p-2 rounded border-l-4 shadow-sm text-foreground',
                             style.bg,
                             style.border
                           )}

@@ -6,6 +6,7 @@ import { MobileSidebar } from './MobileSidebar';
 import { GlobalSearch } from './GlobalSearch';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { Loader2 } from 'lucide-react';
+import { PageTransition } from './PageTransition';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -48,8 +49,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
           <ThemeToggle />
         </header>
-        <main className="flex-1 overflow-auto">
-          {children}
+        <main className="flex-1 overflow-auto bg-muted/20">
+          <PageTransition className="h-full p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+            {children}
+          </PageTransition>
         </main>
       </div>
     </div>

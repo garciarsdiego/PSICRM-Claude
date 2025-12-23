@@ -1,7 +1,7 @@
 import { format, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Calendar, Users, Briefcase, Plane, Clock } from 'lucide-react';
+import { Calendar, Users, Briefcase, Plane, Clock, Plus } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
 type Session = Tables<'sessions'> & {
@@ -16,6 +16,7 @@ interface WeekViewProps {
   googleEvents?: GoogleCalendarEvent[];
   onSessionClick?: (session: Session) => void;
   onDropSession?: (sessionId: string, newDate: Date) => void;
+  onEmptySlotClick?: (date: Date) => void;
 }
 
 const sessionStatusColors: Record<string, string> = {
@@ -37,7 +38,7 @@ const eventTypeStyles: Record<string, { bg: string; border: string; icon: typeof
 // Hours from 08:00 to 22:00
 const HOURS = Array.from({ length: 15 }, (_, i) => i + 8);
 
-export function WeekView({ currentDate, sessions, googleEvents = [], onSessionClick, onDropSession }: WeekViewProps) {
+export function WeekView({ currentDate, sessions, googleEvents = [], onSessionClick, onDropSession, onEmptySlotClick }: WeekViewProps) {
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -82,9 +83,9 @@ export function WeekView({ currentDate, sessions, googleEvents = [], onSessionCl
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[800px]">
-        {/* Header with days */}
-        <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b border-border">
+      <div className="min-w-[800px] h-[600px] overflow-y-auto relative">
+        {/* Header with days - Sticky Top */}
+        <div className="grid grid-cols-[60px_repeat(7,1fr)] sticky top-0 z-20 bg-card border-b border-border shadow-sm">
           <div className="p-2 bg-muted/30 border-r border-border" />
           {weekDays.map((day) => (
             <div
@@ -110,7 +111,7 @@ export function WeekView({ currentDate, sessions, googleEvents = [], onSessionCl
         </div>
 
         {/* Time grid */}
-        <div className="max-h-[600px] overflow-y-auto">
+        <div>
           {HOURS.map((hour) => (
             <div
               key={hour}
@@ -125,65 +126,85 @@ export function WeekView({ currentDate, sessions, googleEvents = [], onSessionCl
               {weekDays.map((day) => {
                 const hourSessions = getSessionsForDayAndHour(day, hour);
                 const hourGoogleEvents = getGoogleEventsForDayAndHour(day, hour);
-                
+
                 return (
                   <div
                     key={`${day.toISOString()}-${hour}`}
                     className={cn(
-                      'min-h-16 p-1 border-r border-border last:border-r-0 relative',
-                      isSameDay(day, new Date()) && 'bg-primary/5'
+                      'min-h-16 p-1 border-r border-border last:border-r-0 relative group transition-colors',
+                      isSameDay(day, new Date()) && 'bg-primary/5',
+                      'hover:bg-muted/50'
                     )}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, day, hour)}
                   >
-                    {/* Sessions */}
-                    {hourSessions.map((session) => (
-                      <div
-                        key={session.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, session)}
-                        onClick={() => onSessionClick?.(session)}
-                        className={cn(
-                          'p-1.5 rounded text-xs cursor-pointer transition-all border-l-4 mb-1',
-                          'hover:opacity-80 hover:shadow-md',
-                          sessionStatusColors[session.status || 'scheduled']
-                        )}
-                      >
-                        <div className="font-medium truncate">
-                          {session.patients?.full_name?.split(' ')[0]}
-                        </div>
-                        <div className="text-[10px] opacity-75">
-                          {format(new Date(session.scheduled_at), 'HH:mm')} - {session.duration}min
-                        </div>
+                    {/* Empty Slot Click Trigger */}
+                    <div
+                      className="absolute inset-0 z-0 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer pointer-events-none group-hover:pointer-events-auto"
+                      onClick={() => {
+                        const slotDate = new Date(day);
+                        slotDate.setHours(hour, 0, 0, 0);
+                        onEmptySlotClick?.(slotDate);
+                      }}
+                    >
+                      <div className="bg-primary/10 text-primary rounded-full p-1 shadow-sm">
+                        <Plus className="w-4 h-4" />
                       </div>
-                    ))}
-                    
-                    {/* Google Calendar Events */}
-                    {hourGoogleEvents.map((event) => {
-                      const style = getEventStyle(event);
-                      const IconComponent = style.icon;
-                      
-                      return (
+                    </div>
+
+                    {/* Sessions - z-10 to stay above the click trigger */}
+                    <div className="relative z-10 space-y-1">
+                      {hourSessions.map((session) => (
                         <div
-                          key={event.id}
+                          key={session.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, session)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSessionClick?.(session);
+                          }}
                           className={cn(
-                            'p-1.5 rounded text-xs border-l-4 mb-1 text-foreground',
-                            style.bg,
-                            style.border
+                            'p-1.5 rounded text-xs cursor-pointer transition-all border-l-4 shadow-sm',
+                            'hover:opacity-90 hover:shadow-md',
+                            sessionStatusColors[session.status || 'scheduled']
                           )}
                         >
-                          <div className="flex items-center gap-1">
-                            <IconComponent className="h-2.5 w-2.5 opacity-75 flex-shrink-0" />
-                            <span className="font-medium truncate text-[11px]">
-                              {event.title}
-                            </span>
+                          <div className="font-medium truncate">
+                            {session.patients?.full_name?.split(' ')[0]}
                           </div>
                           <div className="text-[10px] opacity-75">
-                            {format(new Date(event.start_time), 'HH:mm')}
+                            {format(new Date(session.scheduled_at), 'HH:mm')} - {session.duration}min
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+
+                      {/* Google Calendar Events */}
+                      {hourGoogleEvents.map((event) => {
+                        const style = getEventStyle(event);
+                        const IconComponent = style.icon;
+
+                        return (
+                          <div
+                            key={event.id}
+                            className={cn(
+                              'p-1.5 rounded text-xs border-l-4 shadow-sm text-foreground',
+                              style.bg,
+                              style.border
+                            )}
+                          >
+                            <div className="flex items-center gap-1">
+                              <IconComponent className="h-2.5 w-2.5 opacity-75 flex-shrink-0" />
+                              <span className="font-medium truncate text-[11px]">
+                                {event.title}
+                              </span>
+                            </div>
+                            <div className="text-[10px] opacity-75">
+                              {format(new Date(event.start_time), 'HH:mm')}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}

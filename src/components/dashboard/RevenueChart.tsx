@@ -18,7 +18,7 @@ interface RevenueChartProps {
 
 export function RevenueChart({ data }: RevenueChartProps) {
   return (
-    <Card>
+    <Card className="bg-white/60 dark:bg-card/40 backdrop-blur-md border-white/20 dark:border-border/50">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Receita Mensal</CardTitle>
       </CardHeader>

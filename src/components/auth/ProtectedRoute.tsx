@@ -5,11 +5,11 @@ import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRole?: 'professional' | 'patient';
+  allowedRole?: 'professional' | 'patient' | 'admin';
 }
 
 export function ProtectedRoute({ children, allowedRole }: ProtectedRouteProps) {
-  const { user, loading, role } = useAuth();
+  const { user, loading, role, profile } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -24,17 +24,30 @@ export function ProtectedRoute({ children, allowedRole }: ProtectedRouteProps) {
         return;
       }
 
+      // Check for pending status or missing status (treat as pending)
+      if (role !== 'admin' && (profile?.status === 'pending' || !profile?.status)) {
+        navigate('/pending-approval');
+        return;
+      }
+
       // Check role if specified
       if (allowedRole && role && role !== allowedRole) {
+        // Exception: Admins can access Professional routes
+        if (role === 'admin' && allowedRole === 'professional') {
+          return;
+        }
+
         // Redirect to correct portal
         if (role === 'patient') {
           navigate('/patient/dashboard');
+        } else if (role === 'admin') {
+          navigate('/admin');
         } else {
           navigate('/dashboard');
         }
       }
     }
-  }, [user, loading, role, allowedRole, navigate]);
+  }, [user, loading, role, allowedRole, navigate, profile]);
 
   if (loading) {
     return (
@@ -65,6 +78,10 @@ export function ProtectedRoute({ children, allowedRole }: ProtectedRouteProps) {
 
   // If role doesn't match, return null (redirect will happen in useEffect)
   if (allowedRole && role !== allowedRole) {
+    // Exception: Admins can access Professional routes
+    if (role === 'admin' && allowedRole === 'professional') {
+      return <>{children}</>;
+    }
     return null;
   }
 

@@ -161,14 +161,14 @@ export default function Schedule() {
 
           toast({ title: 'Google Calendar conectado com sucesso!' });
           queryClient.invalidateQueries({ queryKey: ['google-calendar-token'] });
-          
+
           // Clean URL
           window.history.replaceState({}, '', '/schedule');
         } catch {
-          toast({ 
-            title: 'Erro ao conectar Google Calendar', 
+          toast({
+            title: 'Erro ao conectar Google Calendar',
             description: 'Verifique as configurações no Google Cloud Console.',
-            variant: 'destructive' 
+            variant: 'destructive'
           });
           window.history.replaceState({}, '', '/schedule');
         }
@@ -231,11 +231,11 @@ export default function Schedule() {
   const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
     const dates: Date[] = [startDate];
     const monthEnd = endOfMonth(startDate);
-    
+
     if (recurrenceType === 'none') return dates;
-    
+
     let nextDate = startDate;
-    
+
     while (true) {
       if (recurrenceType === 'weekly') {
         nextDate = addWeeks(nextDate, 1);
@@ -245,26 +245,39 @@ export default function Schedule() {
         // For monthly, just one session this month
         break;
       }
-      
+
       if (isAfter(nextDate, monthEnd)) break;
       dates.push(nextDate);
     }
-    
+
     return dates;
   };
+
+  // Sync with Google Calendar manually
+  const syncGoogle = useMutation({
+    mutationFn: async () => {
+      if (!isGoogleConnected) return;
+      await supabase.functions.invoke('google-calendar-sync', {
+        body: { action: 'sync' },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    }
+  });
 
   // Create session mutation
   const createSession = useMutation({
     mutationFn: async (session: typeof newSession) => {
       if (!profile?.user_id) throw new Error('Usuário não autenticado');
-      
+
       const selectedPatient = patients.find(p => p.id === session.patient_id);
       const price = session.price || selectedPatient?.session_price || profile.session_price || 0;
       const scheduledDate = new Date(session.scheduled_at);
-      
+
       // Generate all dates based on recurrence
       const recurringDates = generateRecurringDates(scheduledDate, session.recurrence_type);
-      
+
       // Create sessions for all dates
       const sessionsToInsert = recurringDates.map((date, index) => ({
         professional_id: profile.user_id,
@@ -277,10 +290,10 @@ export default function Schedule() {
         recurrence_rule: session.recurrence_type !== 'none' ? session.recurrence_type : null,
         title: `Sessão - ${selectedPatient?.full_name || 'Paciente'}`,
       }));
-      
+
       const { error } = await supabase.from('sessions').insert(sessionsToInsert);
       if (error) throw error;
-      
+
       // Sync with Google Calendar if enabled and connected
       let meetLinksCreated = 0;
       if (session.sync_google_calendar && isGoogleConnected) {
@@ -288,7 +301,7 @@ export default function Schedule() {
           const { data: syncResult, error: syncError } = await supabase.functions.invoke('google-calendar-sync', {
             body: { action: 'sync' },
           });
-          
+
           if (!syncError && syncResult?.synced) {
             meetLinksCreated = syncResult.synced;
           }
@@ -296,7 +309,7 @@ export default function Schedule() {
           console.error('Error syncing with Google Calendar:', syncErr);
         }
       }
-      
+
       return { count: recurringDates.length, meetLinksCreated };
     },
     onSuccess: ({ count, meetLinksCreated }) => {
@@ -311,15 +324,15 @@ export default function Schedule() {
         recurrence_type: 'none',
         sync_google_calendar: true,
       });
-      
-      let message = count > 1 
-        ? `${count} sessões agendadas com sucesso!` 
+
+      let message = count > 1
+        ? `${count} sessões agendadas com sucesso!`
         : 'Sessão agendada com sucesso!';
-      
+
       if (meetLinksCreated > 0) {
         message += ` Link do Meet criado automaticamente.`;
       }
-      
+
       toast({ title: message });
     },
     onError: () => {
@@ -339,6 +352,7 @@ export default function Schedule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       toast({ title: 'Status atualizado!' });
+      if (isGoogleConnected) syncGoogle.mutate();
     },
   });
 
@@ -354,6 +368,7 @@ export default function Schedule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       toast({ title: 'Sessão atualizada!' });
+      if (isGoogleConnected) syncGoogle.mutate();
     },
     onError: () => {
       toast({ title: 'Erro ao atualizar sessão', variant: 'destructive' });
@@ -372,6 +387,7 @@ export default function Schedule() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       toast({ title: 'Sessão reagendada!' });
+      if (isGoogleConnected) syncGoogle.mutate();
     },
     onError: () => {
       toast({ title: 'Erro ao reagendar sessão', variant: 'destructive' });
@@ -381,6 +397,24 @@ export default function Schedule() {
   // Delete session mutation
   const deleteSession = useMutation({
     mutationFn: async (id: string) => {
+      // Fetch session to check google_event_id
+      const { data: sessionData } = await supabase
+        .from('sessions')
+        .select('google_event_id')
+        .eq('id', id)
+        .single();
+
+      // Delete from Google Calendar if exists
+      if (sessionData?.google_event_id && isGoogleConnected) {
+        try {
+          await supabase.functions.invoke('google-calendar-sync', {
+            body: { action: 'delete_event', google_event_id: sessionData.google_event_id },
+          });
+        } catch (e) {
+          console.error('Failed to delete from Google Calendar', e);
+        }
+      }
+
       const { error } = await supabase
         .from('sessions')
         .delete()
@@ -469,7 +503,7 @@ export default function Schedule() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 {/* Time Slot Picker */}
                 <div>
                   <Label className="mb-2 block">Horário Disponível</Label>
@@ -547,7 +581,7 @@ export default function Schedule() {
                     </p>
                   )}
                 </div>
-                
+
                 {/* Google Calendar Sync */}
                 {isGoogleConnected && (
                   <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
@@ -568,7 +602,7 @@ export default function Schedule() {
                     />
                   </div>
                 )}
-                
+
                 <Button
                   className="w-full"
                   onClick={() => createSession.mutate(newSession)}
@@ -624,6 +658,10 @@ export default function Schedule() {
                     googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
+                    onEmptySlotClick={(date) => {
+                      setNewSession({ ...newSession, scheduled_at: date.toISOString() });
+                      setIsDialogOpen(true);
+                    }}
                   />
                 )}
                 {viewType === 'week' && (
@@ -633,6 +671,10 @@ export default function Schedule() {
                     googleEvents={showGoogleEvents ? googleEvents : []}
                     onSessionClick={handleSessionClick}
                     onDropSession={handleDropSession}
+                    onEmptySlotClick={(date) => {
+                      setNewSession({ ...newSession, scheduled_at: date.toISOString() });
+                      setIsDialogOpen(true);
+                    }}
                   />
                 )}
                 {viewType === 'month' && (
@@ -717,7 +759,7 @@ export default function Schedule() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => setDeleteSessionId(session.id)}
                               className="text-destructive"
                             >
@@ -796,7 +838,7 @@ export default function Schedule() {
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
+                            <DropdownMenuItem
                               onClick={() => setDeleteSessionId(session.id)}
                               className="text-destructive"
                             >

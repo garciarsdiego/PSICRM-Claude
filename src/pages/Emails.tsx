@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { 
+import {
   Mail, Bell, CreditCard, Save, Eye, Send, CheckCircle, AlertCircle, Loader2,
   Users, Clock, Play, FileEdit, RefreshCw, Copy, Check, UserPlus, Calendar
 } from 'lucide-react';
@@ -31,7 +31,7 @@ Este é um lembrete de que sua sessão está agendada para {{data}} às {{hora}}
 Duração prevista: {{duracao}} minutos.
 
 Qualquer dúvida, entre em contato.`,
-  
+
   session_confirmation: `Olá {{nome}},
 
 Sua sessão foi agendada com sucesso!
@@ -45,7 +45,7 @@ Sua sessão foi agendada com sucesso!
 {{/meet_link}}
 
 Aguardo você!`,
-  
+
   payment_reminder: `Olá {{nome}},
 
 Você possui {{sessoes}} sessão(ões) com pagamento pendente, totalizando R$ {{valor}}.
@@ -53,7 +53,7 @@ Você possui {{sessoes}} sessão(ões) com pagamento pendente, totalizando R$ {{
 Por favor, regularize o pagamento assim que possível.
 
 Qualquer dúvida, estou à disposição.`,
-  
+
   welcome: `Olá {{nome}},
 
 É um prazer recebê-lo(a) como novo paciente! A partir de agora, você faz parte do nosso consultório.
@@ -65,6 +65,10 @@ Qualquer dúvida, estou à disposição.`,
 {{#meet_link}}
 📹 Link da reunião: {{meet_link}}
 {{/meet_link}}
+
+{{#link_convite}}
+🔗 Crie sua conta e acesse o portal: {{link_convite}}
+{{/link_convite}}
 
 ⏱️ Duração das sessões: {{duracao}} minutos
 
@@ -94,7 +98,7 @@ const templateInfo = {
     title: 'Boas-vindas',
     description: 'Enviado quando um novo paciente é cadastrado',
     icon: UserPlus,
-    variables: ['nome', 'primeira_sessao_data', 'primeira_sessao_hora', 'duracao', 'meet_link'],
+    variables: ['nome', 'primeira_sessao_data', 'primeira_sessao_hora', 'duracao', 'meet_link', 'link_convite'],
   },
 };
 
@@ -108,6 +112,7 @@ const variableDescriptions: Record<string, string> = {
   valor: 'Valor total pendente (R$)',
   primeira_sessao_data: 'Data da primeira sessão',
   primeira_sessao_hora: 'Horário da primeira sessão',
+  link_convite: 'Link de convite para o Portal do Paciente',
 };
 
 export default function Emails() {
@@ -121,7 +126,7 @@ export default function Emails() {
   const [previewTemplate, setPreviewTemplate] = useState<string | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<string>('');
   const [sendingType, setSendingType] = useState<'session_reminder' | 'payment_reminder' | null>(null);
-  
+
   // Bulk email state
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
   const [bulkEmailTemplate, setBulkEmailTemplate] = useState<'session_reminder' | 'payment_reminder'>('session_reminder');
@@ -270,10 +275,10 @@ export default function Emails() {
       setSendingType(null);
     },
     onError: (error: Error) => {
-      toast({ 
-        title: 'Erro ao enviar email', 
+      toast({
+        title: 'Erro ao enviar email',
         description: error.message,
-        variant: 'destructive' 
+        variant: 'destructive'
       });
       setSendingType(null);
     },
@@ -282,7 +287,7 @@ export default function Emails() {
   // Send bulk email function
   const sendBulkEmails = async () => {
     if (!user?.id || selectedPatients.length === 0) return;
-    
+
     setIsSendingBulk(true);
     let sent = 0;
     let errors = 0;
@@ -325,7 +330,7 @@ export default function Emails() {
 
     setIsSendingBulk(false);
     setSelectedPatients([]);
-    
+
     toast({
       title: `Envio em massa concluído`,
       description: `${sent} emails enviados, ${errors} erros`,
@@ -337,9 +342,9 @@ export default function Emails() {
     setIsRunningCron(true);
     try {
       const { data, error } = await supabase.functions.invoke('send-email-reminders');
-      
+
       if (error) throw error;
-      
+
       toast({
         title: 'Lembretes processados!',
         description: data?.message || `${data?.sent || 0} lembretes enviados`,
@@ -355,8 +360,8 @@ export default function Emails() {
   };
 
   const togglePatientSelection = (patientId: string) => {
-    setSelectedPatients(prev => 
-      prev.includes(patientId) 
+    setSelectedPatients(prev =>
+      prev.includes(patientId)
         ? prev.filter(id => id !== patientId)
         : [...prev, patientId]
     );
@@ -563,7 +568,7 @@ export default function Emails() {
                         {selectedPatients.length} de {patientsWithEmail.length} selecionados
                       </Badge>
                     </div>
-                    
+
                     <div className="max-h-48 overflow-y-auto border rounded-lg p-2 space-y-1">
                       {patientsWithEmail.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
@@ -592,8 +597,8 @@ export default function Emails() {
                     <div className="flex items-end gap-4">
                       <div className="flex-1">
                         <Label>Template</Label>
-                        <Select 
-                          value={bulkEmailTemplate} 
+                        <Select
+                          value={bulkEmailTemplate}
                           onValueChange={(v) => setBulkEmailTemplate(v as 'session_reminder' | 'payment_reminder')}
                         >
                           <SelectTrigger>
@@ -764,8 +769,8 @@ export default function Emails() {
                   <CardContent className="space-y-3">
                     <div className="p-3 bg-muted rounded-lg">
                       <code className="text-xs font-mono text-primary block">
-                        {`{{#meet_link}}`}<br/>
-                        &nbsp;&nbsp;Conteúdo aqui...<br/>
+                        {`{{#meet_link}}`}<br />
+                        &nbsp;&nbsp;Conteúdo aqui...<br />
                         {`{{/meet_link}}`}
                       </code>
                       <p className="text-xs text-muted-foreground mt-2">

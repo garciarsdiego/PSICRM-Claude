@@ -17,6 +17,10 @@ interface UpcomingSessionsProps {
   sessions: Session[];
 }
 
+import { Calendar } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
+import { cn } from '@/lib/utils'; // Ensure cn is available if needed, though simpler valid JSX is fine.
+
 export function UpcomingSessions({ sessions }: UpcomingSessionsProps) {
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -32,21 +36,24 @@ export function UpcomingSessions({ sessions }: UpcomingSessionsProps) {
   };
 
   return (
-    <Card>
+    <Card className="bg-white/60 dark:bg-card/40 backdrop-blur-md border-white/20 dark:border-border/50 h-full">
       <CardHeader>
         <CardTitle className="text-lg font-semibold">Próximas Sessões</CardTitle>
       </CardHeader>
       <CardContent>
         {sessions.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">
-            Nenhuma sessão agendada para hoje
-          </p>
+          <EmptyState
+            icon={Calendar}
+            title="Agenda Livre"
+            description="Nenhuma sessão agendada para hoje."
+            className="py-8"
+          />
         ) : (
           <div className="space-y-4">
             {sessions.map((session) => (
               <div
                 key={session.id}
-                className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-accent/50 transition-colors"
+                className="flex items-center justify-between p-4 rounded-lg border border-border/50 bg-white/50 dark:bg-card/30 hover:bg-accent/50 transition-all duration-300"
               >
                 <div className="flex items-center gap-4">
                   <div className="p-2 rounded-full bg-primary/10">

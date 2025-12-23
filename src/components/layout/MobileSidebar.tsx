@@ -51,10 +51,10 @@ export function MobileSidebar() {
             <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary">
               <Brain className="w-6 h-6 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-sidebar-foreground">MentalCare</span>
+            <span className="font-semibold text-sidebar-foreground">PSICRM</span>
           </SheetTitle>
         </SheetHeader>
-        
+
         <ScrollArea className="flex-1 py-4 h-[calc(100vh-180px)]">
           <nav className="space-y-1 px-3">
             {menuItems.map((item) => {

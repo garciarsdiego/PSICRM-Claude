@@ -19,11 +19,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { ChangePasswordDialog } from '@/components/auth/ChangePasswordDialog';
+import { ThemeCustomizer } from '@/components/settings/ThemeCustomizer';
 import {
   User,
+  Users,
   Settings as SettingsIcon,
   Globe,
   Save,
+  Palette,
 } from 'lucide-react';
 
 const brazilianStates = [
@@ -121,20 +124,34 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-4 md:space-y-6">
-          <TabsList className="w-full grid grid-cols-3 md:flex md:w-auto">
+          <TabsList className="w-full grid grid-cols-5 md:flex md:w-auto">
             <TabsTrigger value="profile" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
               <User className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Perfil</span>
             </TabsTrigger>
+
             <TabsTrigger value="practice" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
               <SettingsIcon className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Consultório</span>
+            </TabsTrigger>
+            <TabsTrigger value="personalization" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <Palette className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Personalização</span>
             </TabsTrigger>
             <TabsTrigger value="preferences" className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
               <Globe className="h-3 w-3 md:h-4 md:w-4" />
               <span className="hidden sm:inline">Preferências</span>
             </TabsTrigger>
+            <TabsTrigger value="team" onClick={() => navigate('/settings/team')} className="flex items-center gap-1 md:gap-2 text-xs md:text-sm">
+              <Users className="h-3 w-3 md:h-4 md:w-4" />
+              <span className="hidden sm:inline">Equipe</span>
+            </TabsTrigger>
           </TabsList>
+
+          {/* Personalization Tab */}
+          <TabsContent value="personalization">
+            <ThemeCustomizer />
+          </TabsContent>
 
           {/* Profile Tab */}
           <TabsContent value="profile" className="space-y-6">
@@ -317,6 +334,40 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5 text-primary" />
+                  Agendamento Online
+                </CardTitle>
+                <CardDescription>
+                  Link público para pacientes agendarem sessões iniciais
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={`${window.location.origin}/book/${profile?.user_id || ''}`}
+                    className="font-mono text-sm bg-background"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      const link = `${window.location.origin}/book/${profile?.user_id}`;
+                      navigator.clipboard.writeText(link);
+                      toast({ title: 'Link copiado!' });
+                    }}
+                  >
+                    Copiar
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Compartilhe este link em suas redes sociais ou site para receber agendamentos automaticamente.
+                </p>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Preferences Tab */}
@@ -396,11 +447,11 @@ export default function Settings() {
           </Button>
         </div>
 
-        <ChangePasswordDialog 
-          open={changePasswordOpen} 
-          onOpenChange={setChangePasswordOpen} 
+        <ChangePasswordDialog
+          open={changePasswordOpen}
+          onOpenChange={setChangePasswordOpen}
         />
       </div>
-    </AppLayout>
+    </AppLayout >
   );
 }

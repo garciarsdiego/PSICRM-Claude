@@ -13,6 +13,16 @@ import { supabase } from '@/integrations/supabase/client';
 
 const emailSchema = z.string().email('Email inválido');
 const passwordSchema = z.string().min(6, 'Senha deve ter no mínimo 6 caracteres');
+const uuidSchema = z.string().uuid('Token inválido');
+
+// Schema for invite data from sessionStorage
+const inviteDataSchema = z.object({
+  id: z.string().uuid(),
+  professional_id: z.string().uuid(),
+  patient_id: z.string().uuid().nullable(),
+  email: z.string().email().nullable(),
+  professional_name: z.string().optional(),
+});
 
 interface InviteData {
   id: string;
@@ -46,6 +56,14 @@ export default function PatientAuth() {
     const loadInvite = async () => {
       if (!inviteToken) return;
       
+      // Validate token is a valid UUID before querying
+      const tokenValidation = uuidSchema.safeParse(inviteToken);
+      if (!tokenValidation.success) {
+        setInviteError('Convite inválido');
+        setInviteLoading(false);
+        return;
+      }
+      
       setInviteLoading(true);
       try {
         const { data: invite, error } = await supabase
@@ -78,8 +96,7 @@ export default function PatientAuth() {
         if (invite.email) {
           setSignupEmail(invite.email);
         }
-      } catch (error) {
-        console.error('Error loading invite:', error);
+      } catch {
         setInviteError('Erro ao carregar convite');
       } finally {
         setInviteLoading(false);
@@ -210,7 +227,16 @@ export default function PatientAuth() {
       if (!pendingInviteStr || !user) return;
 
       try {
-        const pendingInvite = JSON.parse(pendingInviteStr);
+        const parsedData = JSON.parse(pendingInviteStr);
+        
+        // Validate the structure from sessionStorage
+        const validationResult = inviteDataSchema.safeParse(parsedData);
+        if (!validationResult.success) {
+          sessionStorage.removeItem('pendingInvite');
+          return;
+        }
+        
+        const pendingInvite = validationResult.data;
         
         if (pendingInvite.patient_id) {
           // Update patient with user_id
@@ -220,7 +246,7 @@ export default function PatientAuth() {
             .eq('id', pendingInvite.patient_id);
 
           if (updateError) {
-            console.error('Error linking patient:', updateError);
+            // Silent fail - the invite flow will still complete
           }
         }
 
@@ -236,8 +262,7 @@ export default function PatientAuth() {
           title: 'Vinculado com sucesso!',
           description: `Você está vinculado ao profissional ${pendingInvite.professional_name}.`,
         });
-      } catch (error) {
-        console.error('Error processing invite:', error);
+      } catch {
         sessionStorage.removeItem('pendingInvite');
       }
     };

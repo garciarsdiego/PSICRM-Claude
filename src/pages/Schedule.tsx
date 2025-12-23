@@ -140,7 +140,6 @@ export default function Schedule() {
     if (code && state && user?.id) {
       // Verify state matches user id for security
       if (user.id !== state) {
-        console.error('OAuth state mismatch');
         window.history.replaceState({}, '', '/schedule');
         return;
       }
@@ -148,8 +147,7 @@ export default function Schedule() {
       // Exchange code for tokens
       const exchangeCode = async () => {
         try {
-          console.log('Exchanging OAuth code...');
-          const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+          const { error } = await supabase.functions.invoke('google-calendar-auth', {
             body: {
               action: 'exchange_code',
               code,
@@ -158,18 +156,15 @@ export default function Schedule() {
           });
 
           if (error) {
-            console.error('Exchange error:', error);
             throw error;
           }
 
-          console.log('Exchange response:', data);
           toast({ title: 'Google Calendar conectado com sucesso!' });
           queryClient.invalidateQueries({ queryKey: ['google-calendar-token'] });
           
           // Clean URL
           window.history.replaceState({}, '', '/schedule');
-        } catch (err) {
-          console.error('Error exchanging code:', err);
+        } catch {
           toast({ 
             title: 'Erro ao conectar Google Calendar', 
             description: 'Verifique as configurações no Google Cloud Console.',

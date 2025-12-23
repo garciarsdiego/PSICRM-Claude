@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format, addWeeks, endOfMonth, isAfter, setHours, setMinutes } from 'date-fns';
+import { format, setHours, setMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -86,6 +86,9 @@ import {
 } from '@/components/ui/alert-dialog';
 import type { Tables } from '@/integrations/supabase/types';
 import { useNavigate } from 'react-router-dom';
+import { queryKeys } from '@/lib/queryKeys';
+import { generateRecurringDates } from '@/lib/dateUtils';
+import { DEFAULTS } from '@/lib/constants';
 
 type Patient = Tables<'patients'>;
 
@@ -145,9 +148,9 @@ export default function Patients() {
     price: '',
   });
 
-  // Fetch patients
+  // Fetch patients with standardized query key
   const { data: patients = [], isLoading } = useQuery({
-    queryKey: ['patients', profile?.user_id],
+    queryKey: queryKeys.patients.all(profile?.user_id || ''),
     queryFn: async () => {
       if (!profile?.user_id) return [];
       const { data, error } = await supabase
@@ -161,30 +164,17 @@ export default function Patients() {
     enabled: !!profile?.user_id,
   });
 
-  // Generate recurring dates for the current month
-  const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
-    const dates: Date[] = [startDate];
-    const monthEnd = endOfMonth(startDate);
-    
-    if (recurrenceType === 'none') return dates;
-    
-    let nextDate = startDate;
-    
-    while (true) {
-      if (recurrenceType === 'weekly') {
-        nextDate = addWeeks(nextDate, 1);
-      } else if (recurrenceType === 'biweekly') {
-        nextDate = addWeeks(nextDate, 2);
-      } else if (recurrenceType === 'monthly') {
-        break;
-      }
-      
-      if (isAfter(nextDate, monthEnd)) break;
-      dates.push(nextDate);
-    }
-    
-    return dates;
-  };
+  // Memoized filtered patients for performance
+  const filteredPatients = useMemo(() => {
+    return patients.filter(patient => {
+      const matchesSearch =
+        patient.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        patient.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        patient.phone?.includes(searchTerm);
+      const matchesStatus = showInactive || patient.is_active;
+      return matchesSearch && matchesStatus;
+    });
+  }, [patients, searchTerm, showInactive]);
 
   // Create/Update patient mutation
   const savePatient = useMutation({

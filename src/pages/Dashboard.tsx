@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { StatsCard } from '@/components/dashboard/StatsCard';
 import { UpcomingSessions } from '@/components/dashboard/UpcomingSessions';
@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { DollarSign, Users, Calendar, AlertCircle } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getLastMonthsBoundaries } from '@/lib/dateUtils';
+import { DEFAULTS } from '@/lib/constants';
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
@@ -17,8 +19,13 @@ export default function Dashboard() {
     monthSessions: 0,
     pendingPayments: 0,
   });
-  const [todaySessions, setTodaySessions] = useState<any[]>([]);
-  const [revenueData, setRevenueData] = useState<any[]>([]);
+  const [todaySessions, setTodaySessions] = useState<Array<{
+    id: string;
+    scheduled_at: string;
+    status: string;
+    patient: { full_name: string } | null;
+  }>>([]);
+  const [revenueData, setRevenueData] = useState<Array<{ month: string; revenue: number }>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -94,30 +101,31 @@ export default function Dashboard() {
 
       setTodaySessions(todayResult.data || []);
 
-      // Buscar receita real dos últimos 6 meses
-      const revenueByMonth: any[] = [];
-      for (let i = 5; i >= 0; i--) {
-        const date = new Date();
-        date.setMonth(date.getMonth() - i);
-        const mStart = startOfMonth(date);
-        const mEnd = endOfMonth(date);
-        const monthName = format(date, 'MMM', { locale: ptBR });
-        
-        const { data: monthSessions } = await supabase
-          .from('sessions')
-          .select('price')
-          .eq('professional_id', user.id)
-          .eq('payment_status', 'paid')
-          .gte('scheduled_at', mStart.toISOString())
-          .lte('scheduled_at', mEnd.toISOString());
-        
-        const monthRevenue = monthSessions?.reduce((acc, s) => acc + Number(s.price), 0) || 0;
-        
-        revenueByMonth.push({
-          month: monthName,
-          revenue: monthRevenue,
-        });
-      }
+      // Buscar receita dos últimos 6 meses em UMA ÚNICA query (fix N+1)
+      const monthBoundaries = getLastMonthsBoundaries(DEFAULTS.REVENUE_MONTHS_TO_SHOW);
+      const sixMonthsAgo = monthBoundaries[0].start;
+      const today = monthBoundaries[monthBoundaries.length - 1].end;
+
+      const { data: allRevenueSessions } = await supabase
+        .from('sessions')
+        .select('price, scheduled_at')
+        .eq('professional_id', user.id)
+        .eq('payment_status', 'paid')
+        .gte('scheduled_at', sixMonthsAgo.toISOString())
+        .lte('scheduled_at', today.toISOString());
+
+      // Agrupar por mês no cliente
+      const revenueByMonth = monthBoundaries.map(({ start, end, label }) => {
+        const monthRevenue = (allRevenueSessions || [])
+          .filter(s => {
+            const sessionDate = new Date(s.scheduled_at);
+            return sessionDate >= start && sessionDate <= end;
+          })
+          .reduce((acc, s) => acc + Number(s.price), 0);
+
+        return { month: label, revenue: monthRevenue };
+      });
+
       setRevenueData(revenueByMonth);
 
     } catch (error) {

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format, addDays, addWeeks, endOfMonth, isBefore, isAfter } from 'date-fns';
+import { format, addDays, isBefore, isAfter } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +68,13 @@ import { WeekView } from '@/components/schedule/WeekView';
 import { MonthView } from '@/components/schedule/MonthView';
 import { SessionDetailModal } from '@/components/schedule/SessionDetailModal';
 import { TimeSlotPicker } from '@/components/schedule/TimeSlotPicker';
+import { queryKeys } from '@/lib/queryKeys';
+import { generateRecurringDates } from '@/lib/dateUtils';
+import {
+  SESSION_STATUS_COLORS,
+  SESSION_STATUS_LABELS,
+  DEFAULTS
+} from '@/lib/constants';
 
 type Session = Tables<'sessions'> & {
   patients: { full_name: string } | null;
@@ -77,19 +84,8 @@ type Patient = Tables<'patients'>;
 
 type GoogleCalendarEvent = Tables<'google_calendar_events'>;
 
-const sessionStatusColors: Record<string, string> = {
-  scheduled: 'bg-primary/20 text-primary border-primary',
-  completed: 'bg-success/20 text-success border-success',
-  cancelled: 'bg-muted text-muted-foreground border-muted',
-  no_show: 'bg-destructive/20 text-destructive border-destructive',
-};
-
-const sessionStatusLabels: Record<string, string> = {
-  scheduled: 'Agendada',
-  completed: 'Realizada',
-  cancelled: 'Cancelada',
-  no_show: 'Não compareceu',
-};
+// Using centralized constants from @/lib/constants
+// SESSION_STATUS_COLORS and SESSION_STATUS_LABELS are imported
 
 export default function Schedule() {
   const { profile, user } = useAuth();
@@ -179,11 +175,11 @@ export default function Schedule() {
   }, [user?.id, toast, queryClient]);
 
 
-  // Fetch sessions
+  // Fetch sessions with standardized query key
   const { data: sessions = [], isLoading: loadingSessions } = useQuery({
-    queryKey: ['sessions', profile?.id],
+    queryKey: queryKeys.sessions.all(profile?.user_id || ''),
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.user_id) return [];
       const { data, error } = await supabase
         .from('sessions')
         .select('*, patients(full_name)')
@@ -192,14 +188,14 @@ export default function Schedule() {
       if (error) throw error;
       return data as Session[];
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.user_id,
   });
 
-  // Fetch Google Calendar events
+  // Fetch Google Calendar events with standardized query key
   const { data: googleEvents = [] } = useQuery({
-    queryKey: ['google-calendar-events', profile?.id],
+    queryKey: queryKeys.googleCalendar.events(profile?.user_id || ''),
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.user_id) return [];
       const { data, error } = await supabase
         .from('google_calendar_events')
         .select('*')
@@ -208,13 +204,14 @@ export default function Schedule() {
       if (error) throw error;
       return data;
     },
+    enabled: !!profile?.user_id,
   });
 
-  // Fetch patients for the dropdown
+  // Fetch patients for the dropdown with standardized query key
   const { data: patients = [] } = useQuery({
-    queryKey: ['patients', profile?.id],
+    queryKey: queryKeys.patients.active(profile?.user_id || ''),
     queryFn: async () => {
-      if (!profile?.id) return [];
+      if (!profile?.user_id) return [];
       const { data, error } = await supabase
         .from('patients')
         .select('*')
@@ -224,34 +221,10 @@ export default function Schedule() {
       if (error) throw error;
       return data as Patient[];
     },
-    enabled: !!profile?.id,
+    enabled: !!profile?.user_id,
   });
 
-  // Generate recurring dates for the current month
-  const generateRecurringDates = (startDate: Date, recurrenceType: string): Date[] => {
-    const dates: Date[] = [startDate];
-    const monthEnd = endOfMonth(startDate);
-    
-    if (recurrenceType === 'none') return dates;
-    
-    let nextDate = startDate;
-    
-    while (true) {
-      if (recurrenceType === 'weekly') {
-        nextDate = addWeeks(nextDate, 1);
-      } else if (recurrenceType === 'biweekly') {
-        nextDate = addWeeks(nextDate, 2);
-      } else if (recurrenceType === 'monthly') {
-        // For monthly, just one session this month
-        break;
-      }
-      
-      if (isAfter(nextDate, monthEnd)) break;
-      dates.push(nextDate);
-    }
-    
-    return dates;
-  };
+  // generateRecurringDates is now imported from @/lib/dateUtils
 
   // Create session mutation
   const createSession = useMutation({

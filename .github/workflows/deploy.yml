@@ -25,10 +25,12 @@ jobs:
         run: npm run build
 
       - name: 5. Deploy via FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: ./public_html/ # CHANGE THIS if you want to deploy to a subfolder
+          server-dir: ./public_html/
+          log-level: verbose
+          security: strict

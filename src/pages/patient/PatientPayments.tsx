@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { PatientLayout } from '@/components/patient/PatientLayout';
@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Copy,
-  Loader2,
 } from 'lucide-react';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -23,7 +22,6 @@ type Session = Tables<'sessions'>;
 export default function PatientPayments() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
 
   // Fetch patient record
   const { data: patientRecord } = useQuery({
@@ -66,24 +64,15 @@ export default function PatientPayments() {
   const totalPending = pendingSessions.reduce((acc, s) => acc + Number(s.price), 0);
   const totalPaid = paidSessions.reduce((acc, s) => acc + Number(s.price), 0);
 
-  // Simulate payment (in production would integrate with Stripe)
-  const simulatePayment = useMutation({
-    mutationFn: async (sessionId: string) => {
-      const { error } = await supabase
-        .from('sessions')
-        .update({ payment_status: 'paid', paid_at: new Date().toISOString() })
-        .eq('id', sessionId);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patient-payments'] });
-      queryClient.invalidateQueries({ queryKey: ['patient-pending-payments'] });
-      toast({ title: 'Pagamento registrado com sucesso!' });
-    },
-    onError: () => {
-      toast({ title: 'Erro ao processar pagamento', variant: 'destructive' });
-    },
-  });
+  // Payment is disabled - requires proper payment gateway integration
+  // Patients cannot mark their own sessions as paid - this must be done by the professional
+  // or through a verified payment processor
+  const handlePaymentClick = () => {
+    toast({
+      title: 'Pagamento',
+      description: 'Entre em contato com o profissional para efetuar o pagamento.',
+    });
+  };
 
   const generatePixCode = () => {
     // Simulated PIX code - in production would generate real PIX
@@ -185,17 +174,11 @@ export default function PatientPayments() {
                     <div className="flex flex-col gap-1 sm:gap-2">
                       <Button
                         size="sm"
-                        onClick={() => simulatePayment.mutate(session.id)}
-                        disabled={simulatePayment.isPending}
+                        onClick={handlePaymentClick}
+                        variant="outline"
                       >
-                        {simulatePayment.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <CreditCard className="h-4 w-4 mr-1" />
-                            Pagar
-                          </>
-                        )}
+                        <CreditCard className="h-4 w-4 mr-1" />
+                        Pagar
                       </Button>
                       <Button size="sm" variant="outline" onClick={generatePixCode}>
                         <Copy className="h-4 w-4 mr-1" />

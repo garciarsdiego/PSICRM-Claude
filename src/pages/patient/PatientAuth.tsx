@@ -38,7 +38,7 @@ export default function PatientAuth() {
   const inviteToken = searchParams.get('invite');
   const { user, role, signIn, signUp } = useAuth();
   const { toast } = useToast();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -46,7 +46,7 @@ export default function PatientAuth() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirmPassword, setSignupConfirmPassword] = useState('');
-  
+
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
   const [inviteError, setInviteError] = useState('');
@@ -55,7 +55,7 @@ export default function PatientAuth() {
   useEffect(() => {
     const loadInvite = async () => {
       if (!inviteToken) return;
-      
+
       // Validate token is a valid UUID before querying
       const tokenValidation = uuidSchema.safeParse(inviteToken);
       if (!tokenValidation.success) {
@@ -63,7 +63,7 @@ export default function PatientAuth() {
         setInviteLoading(false);
         return;
       }
-      
+
       setInviteLoading(true);
       try {
         const { data: invite, error } = await supabase
@@ -116,7 +116,7 @@ export default function PatientAuth() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(loginEmail);
       passwordSchema.parse(loginPassword);
@@ -139,8 +139,8 @@ export default function PatientAuth() {
       toast({
         variant: 'destructive',
         title: 'Erro ao entrar',
-        description: error.message === 'Invalid login credentials' 
-          ? 'Email ou senha incorretos' 
+        description: error.message === 'Invalid login credentials'
+          ? 'Email ou senha incorretos'
           : error.message,
       });
     }
@@ -183,7 +183,7 @@ export default function PatientAuth() {
 
     setIsLoading(true);
     const { error } = await signUp(signupEmail, signupPassword, signupName, 'patient');
-    
+
     if (error) {
       setIsLoading(false);
       if (error.message.includes('already registered')) {
@@ -228,16 +228,16 @@ export default function PatientAuth() {
 
       try {
         const parsedData = JSON.parse(pendingInviteStr);
-        
+
         // Validate the structure from sessionStorage
         const validationResult = inviteDataSchema.safeParse(parsedData);
         if (!validationResult.success) {
           sessionStorage.removeItem('pendingInvite');
           return;
         }
-        
+
         const pendingInvite = validationResult.data;
-        
+
         if (pendingInvite.patient_id) {
           // Update patient with user_id
           const { error: updateError } = await supabase
@@ -257,7 +257,7 @@ export default function PatientAuth() {
           .eq('id', pendingInvite.id);
 
         sessionStorage.removeItem('pendingInvite');
-        
+
         toast({
           title: 'Vinculado com sucesso!',
           description: `Você está vinculado ao profissional ${pendingInvite.professional_name}.`,
@@ -281,8 +281,8 @@ export default function PatientAuth() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <Link 
-          to="/auth" 
+        <Link
+          to="/auth"
           className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
         >
           <ArrowLeft className="w-4 h-4 mr-1" />
@@ -339,99 +339,139 @@ export default function PatientAuth() {
               </TabsList>
 
               <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Entrando...
-                      </>
-                    ) : (
-                      'Entrar'
-                    )}
+                <div className="space-y-4">
+                  <Button variant="outline" className="w-full relative" disabled>
+                    <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                      <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+                    </svg>
+                    Entrar com Google (Em breve)
                   </Button>
-                </form>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Ou continue com email
+                      </span>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="login-email">Email</Label>
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="login-password">Senha</Label>
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Entrando...
+                        </>
+                      ) : (
+                        'Entrar'
+                      )}
+                    </Button>
+                  </form>
+                </div>
               </TabsContent>
 
               <TabsContent value="signup">
-                <form onSubmit={handleSignup} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-name">Nome completo</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="João Silva"
-                      value={signupName}
-                      onChange={(e) => setSignupName(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Senha</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="Mínimo 6 caracteres"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm">Confirmar senha</Label>
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      placeholder="Repita a senha"
-                      value={signupConfirmPassword}
-                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                      disabled={isLoading}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Criando conta...
-                      </>
-                    ) : (
-                      'Criar conta'
-                    )}
+                <div className="space-y-4">
+                  <Button variant="outline" className="w-full relative" disabled>
+                    <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
+                      <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
+                    </svg>
+                    Cadastrar com Google (Em breve)
                   </Button>
-                </form>
+
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Ou continue com email
+                      </span>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleSignup} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-name">Nome completo</Label>
+                      <Input
+                        id="signup-name"
+                        type="text"
+                        placeholder="João Silva"
+                        value={signupName}
+                        onChange={(e) => setSignupName(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-email">Email</Label>
+                      <Input
+                        id="signup-email"
+                        type="email"
+                        placeholder="seu@email.com"
+                        value={signupEmail}
+                        onChange={(e) => setSignupEmail(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password">Senha</Label>
+                      <Input
+                        id="signup-password"
+                        type="password"
+                        placeholder="Mínimo 6 caracteres"
+                        value={signupPassword}
+                        onChange={(e) => setSignupPassword(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-confirm">Confirmar senha</Label>
+                      <Input
+                        id="signup-confirm"
+                        type="password"
+                        placeholder="Repita a senha"
+                        value={signupConfirmPassword}
+                        onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Criando conta...
+                        </>
+                      ) : (
+                        'Criar conta'
+                      )}
+                    </Button>
+                  </form>
+                </div>
               </TabsContent>
             </Tabs>
           </CardContent>
